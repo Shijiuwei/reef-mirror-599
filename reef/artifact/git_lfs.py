@@ -1,0 +1,862 @@
+from __future__ import annotations
+
+import base64
+import json
+import os
+import shutil
+import tempfile
+import time
+import uuid
+from collections.abc import Callable, Mapping, Sequence
+from pathlib import Path
+from threading import Lock
+
+from reef.artifact.artifact import (
+    Artifact,
+    ArtifactConflict,
+    ArtifactMaterializationError,
+    ArtifactNotFound,
+    ArtifactPublicationError,
+    ArtifactRef,
+    ArtifactSourceError,
+)
+from reef.artifact.composite import link_or_copy
+from reef.artifact.git_client import GitClient
+from reef.artifact.repository import CachedRepositoryBackendFactory, StagedReleaseRepositoryBackend
+from reef.artifact.sources import GitVersionSource, download_huggingface_snapshot, parse_artifact_source
+from reef.core.components import validate_component_name
+
+_MANIFEST = "reef-artifact.json"
+_LFS_PATTERNS = ("*.safetensors", "*.bin", "*.pt", "*.pth", "*.ckpt")
+_LFS_ATTRIBUTES = "".join(f"{pattern} filter=lfs diff=lfs merge=lfs -text\n" for pattern in _LFS_PATTERNS)
+
+
+def _check_tools() -> None:
+    git = GitClient(Path())
+    git.run(("git", "--version"), source_error=True)
+    try:
+        git.run(("git", "lfs", "version"), source_error=True)
+    except ArtifactSourceError as exc:
+        raise ArtifactSourceError(f"{exc}; install the Git LFS system package before starting Reef") from exc
+
+
+def _initialize_local_repository(repository: Path, git: GitClient) -> None:
+    repository.parent.mkdir(parents=True, exist_ok=True)
+    temporary = Path(tempfile.mkdtemp(prefix=f".{repository.name}-", dir=repository.parent))
+    try:
+        git.run(("git", "init", "--bare", str(temporary)), source_error=True)
+        try:
+            temporary.rename(repository)
+        except OSError:
+            if not repository.is_dir():
+                raise
+    finally:
+        shutil.rmtree(temporary, ignore_errors=True)
+
+
+class _GitWorkspace:
+    """Manage one git working tree used by a single scenario backend.
+
+    Encapsulates git clone/checkout/commit/push so the backend does not
+    call git directly. Holds the work_dir, clone_dir, and a per-process
+    lock serializing mutations.
+    """
+
+    def __init__(
+        self,
+        *,
+        repository: str,
+        work_dir: Path,
+        git_client: GitClient,
+    ) -> None:
+        self.repository = repository
+        self.work_dir = Path(work_dir)
+        self.clone_dir = self.work_dir / "repository"
+        self._git_client = git_client
+        self.lock = Lock()
+
+    def open_repository(self) -> None:
+        if not (self.clone_dir / ".git").exists():
+            if self.clone_dir.exists():
+                shutil.rmtree(self.clone_dir)
+            self._run(("git", "clone", "--no-checkout", self.repository, str(self.clone_dir)))
+        self.git("config", "user.name", "Reef Repository Backend")
+        self.git("config", "user.email", "reef-artifacts@localhost")
+        self._install_lfs(self.clone_dir)
+        # A publish indexes a staged tree that has no .gitattributes of Reef's own, so the LFS
+        # patterns also live in the repository's attributes, which take precedence over the tree's.
+        repository_attributes = self.clone_dir / ".git" / "info" / "attributes"
+        repository_attributes.parent.mkdir(exist_ok=True)
+        write_fresh(repository_attributes, _LFS_ATTRIBUTES)
+
+    def _install_lfs(self, repository: Path) -> None:
+        # Keep LFS hooks separate from global hooks and hooks copied by Git templates.
+        hooks = repository.resolve() / ".git" / "reef-hooks"
+        self._run(("git", "config", "--local", "core.hooksPath", str(hooks)), cwd=repository)
+        self._run(("git", "lfs", "install", "--local", "--skip-smudge"), cwd=repository)
+
+    def checkout(self, version: str) -> None:
+        self.git("fetch", "origin", version)
+        self.git("checkout", "--detach", "FETCH_HEAD")
+        self.git("reset", "--hard", "FETCH_HEAD")
+        self.git("clean", "-fdx")
+
+    def orphan_checkout(self) -> None:
+        self.git("checkout", "--orphan", f"reef-initial-{uuid.uuid4().hex}")
+        self.git("rm", "-rf", "--ignore-unmatch", ".")
+        self.git("clean", "-fdx")
+
+    def replace_tree(self, source: Path, *, subdirectory: str | None = None) -> None:
+        """Replace the work tree with ``source``, placed under ``subdirectory`` when one is named.
+
+        The files are hard links to ``source``'s, so nothing may write through
+        them afterwards: a work tree file Reef rewrites goes through
+        ``write_fresh``, which unlinks it first.
+        """
+        for child in self.clone_dir.iterdir():
+            if child.name == ".git":
+                continue
+            if child.is_dir() and not child.is_symlink():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+        target = self.clone_dir if subdirectory is None else self.clone_dir / subdirectory
+        target.mkdir(parents=True, exist_ok=True)
+        # Released files are immutable, so the work tree links them rather than copying a checkpoint per step.
+        for child in source.iterdir():
+            destination = target / child.name
+            if child.is_dir():
+                try:
+                    shutil.copytree(child, destination, symlinks=False, copy_function=link_or_copy)
+                except shutil.Error as exc:
+                    # copytree collects (source, destination, why) per file; the first names the fault.
+                    failures = exc.args[0] if exc.args and isinstance(exc.args[0], list) else []
+                    first = (
+                        failures[0] if failures and isinstance(failures[0], tuple) and len(failures[0]) == 3 else None
+                    )
+                    if first is None:
+                        raise ArtifactSourceError(
+                            f"artifact contains a file that cannot be read under {child}: {exc}"
+                        ) from exc
+                    source_path, _, why = first
+                    if "No such file" in str(why):
+                        raise ArtifactSourceError(f"artifact contains a broken symlink: {source_path}") from exc
+                    raise ArtifactSourceError(
+                        f"artifact contains a file that cannot be read: {source_path}: {why}"
+                    ) from exc
+            else:
+                try:
+                    link_or_copy(str(child), str(destination))
+                except FileNotFoundError as exc:
+                    raise ArtifactSourceError(f"artifact contains a broken symlink: {child}") from exc
+
+    def write_lfs_attributes(self) -> None:
+        write_fresh(self.clone_dir / ".gitattributes", _LFS_ATTRIBUTES)
+
+    def source_files(self, source: Path) -> tuple[str, ...]:
+        """The files ``git add -A`` would take from ``source``, relative to it; nothing is hashed."""
+        index = self.work_dir / "source-index"
+        index.unlink(missing_ok=True)
+        output = self._run(
+            ("git", f"--work-tree={source.resolve()}", "ls-files", "-z", "--others", "--exclude-standard"),
+            cwd=self.clone_dir,
+            environment={"GIT_INDEX_FILE": str(index)},
+        )
+        return tuple(path for path in output.split("\0") if path)
+
+    def commit_files(
+        self,
+        source: Path,
+        paths: Sequence[str],
+        *,
+        parent: str,
+        carried_from: Path | None,
+        files: Mapping[str, str],
+        message: str,
+    ) -> str:
+        """Commit ``paths`` from ``source`` plus ``files`` as the child of ``parent`` without checking it out.
+
+        The index starts from the parent's tree, so a file that is a hard link
+        to the same path in ``carried_from`` (the parent's materialized tree)
+        keeps the parent's blob instead of being read and hashed again; only
+        the other paths go through the LFS clean filter. The work tree is left
+        untouched.
+        """
+        index = self.work_dir / "publish-index"
+        index.unlink(missing_ok=True)
+        environment = {"GIT_INDEX_FILE": str(index)}
+        try:
+            self.git("fetch", "origin", parent)
+            self._run(("git", "read-tree", parent), cwd=self.clone_dir, environment=environment)
+            parent_paths = {
+                path
+                for path in self._run(("git", "ls-files", "-z"), cwd=self.clone_dir, environment=environment).split(
+                    "\0"
+                )
+                if path
+            }
+            removed = parent_paths.difference(paths, files)
+            if removed:
+                self._run(
+                    ("git", "update-index", "-z", "--force-remove", "--stdin"),
+                    cwd=self.clone_dir,
+                    environment=environment,
+                    input_text="\0".join(sorted(removed)),
+                )
+            changed = [
+                path
+                for path in paths
+                if path not in parent_paths
+                or carried_from is None
+                or not same_file(source / path, carried_from / path)
+            ]
+            if changed:
+                self._run(
+                    ("git", f"--work-tree={source.resolve()}", "update-index", "-z", "--add", "--stdin"),
+                    cwd=self.clone_dir,
+                    environment=environment,
+                    input_text="\0".join(changed),
+                )
+            entries = []
+            for path, text in files.items():
+                blob = self._run(("git", "hash-object", "-w", "--stdin"), cwd=self.clone_dir, input_text=text)
+                entries.append(f"100644 {blob}\t{path}\n")
+            self._run(
+                ("git", "update-index", "--index-info"),
+                cwd=self.clone_dir,
+                environment=environment,
+                input_text="".join(entries),
+            )
+            tree = self._run(("git", "write-tree"), cwd=self.clone_dir, environment=environment)
+            return self.git("commit-tree", tree, "-p", parent, "-m", message)
+        finally:
+            index.unlink(missing_ok=True)
+
+    def commit(self, message: str) -> str:
+        self.git("add", "-A")
+        self.git("commit", "-m", message)
+        return self.git("rev-parse", "HEAD")
+
+    def push(self, *refs: str) -> None:
+        self.git("push", "origin", *refs)
+
+    def force_push_with_lease(self, lease: str, *refs: str) -> None:
+        self.git("push", lease, "origin", *refs)
+
+    def fetch_version(self, version: str) -> str:
+        self.git("fetch", "origin", version)
+        return self.git("rev-parse", "FETCH_HEAD")
+
+    def fetch_lfs_objects(self, version: str) -> None:
+        self.git("lfs", "fetch", "origin", version)
+
+    def show_file(self, version: str, path: str) -> str:
+        self.git("fetch", "origin", version)
+        return self.git("show", f"FETCH_HEAD:{path}")
+
+    def ls_remote(self, ref_name: str) -> str | None:
+        output = self.git("ls-remote", "origin", ref_name)
+        if not output:
+            return None
+        return output.split()[0]
+
+    def has_refs(self) -> bool:
+        return bool(self.git("ls-remote", "origin"))
+
+    def clone_for_materialize(self, destination: Path, version: str) -> None:
+        self._run(("git", "clone", "--no-checkout", self.repository, str(destination)))
+        self._install_lfs(destination)
+        self._run(("git", "fetch", "origin", version), cwd=destination)
+        self._run(("git", "checkout", "--detach", "FETCH_HEAD"), cwd=destination)
+        self._run(("git", "lfs", "pull"), cwd=destination)
+
+    def git(self, *args: str) -> str:
+        return self._git_client.git(*args)
+
+    def _run(
+        self,
+        command: Sequence[str],
+        *,
+        cwd: Path | None = None,
+        source_error: bool = False,
+        input_text: str | None = None,
+        environment: Mapping[str, str] | None = None,
+    ) -> str:
+        return self._git_client.run(
+            command, cwd=cwd, source_error=source_error, input_text=input_text, environment=environment
+        )
+
+
+def same_file(first: Path, second: Path) -> bool:
+    """Whether both paths name one file; a missing path names none."""
+    try:
+        return os.path.samefile(first, second)
+    except OSError:
+        return False
+
+
+def write_fresh(path: Path, text: str) -> None:
+    """Write ``text`` to a new inode: a work tree file may be a link to a released or cached file."""
+    path.unlink(missing_ok=True)
+    path.write_text(text, encoding="utf-8")
+
+
+def materialized_metadata(checkout: Path) -> Mapping[str, object]:
+    """The release metadata recorded in a materialized checkout's manifest; a bootstrap tree has none."""
+    manifest_path = checkout / _MANIFEST
+    if not manifest_path.is_file():
+        return {}
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except json.JSONDecodeError as exc:
+        raise ArtifactMaterializationError(f"invalid artifact manifest in {checkout}") from exc
+    metadata = manifest.get("metadata", {}) if isinstance(manifest, Mapping) else None
+    if not isinstance(metadata, Mapping):
+        raise ArtifactMaterializationError(f"invalid artifact metadata in {checkout}")
+    return dict(metadata)
+
+
+class _ArtifactManifest:
+    """Read and write the reef-artifact.json manifest inside a git work tree."""
+
+    def __init__(self, workspace: _GitWorkspace) -> None:
+        self._workspace = workspace
+
+    @staticmethod
+    def text(
+        *,
+        content_id: str,
+        parent_release_id: str | None,
+        source: Mapping[str, object],
+        metadata: Mapping[str, object],
+    ) -> str:
+        manifest = {
+            "content_id": content_id,
+            "parent_release_id": parent_release_id,
+            "source": dict(source),
+            "metadata": dict(metadata),
+        }
+        return json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+
+    def write(
+        self,
+        *,
+        content_id: str,
+        parent_release_id: str | None,
+        source: Mapping[str, object],
+        metadata: Mapping[str, object],
+    ) -> None:
+        write_fresh(
+            self._workspace.clone_dir / _MANIFEST,
+            self.text(content_id=content_id, parent_release_id=parent_release_id, source=source, metadata=metadata),
+        )
+
+    def read(self, version: str) -> Mapping[str, object]:
+        raw = self._workspace.show_file(version, _MANIFEST)
+        try:
+            manifest = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ArtifactSourceError(f"invalid artifact manifest at {version}") from exc
+        if not isinstance(manifest, Mapping):
+            raise ArtifactSourceError(f"invalid artifact manifest at {version}")
+        return manifest
+
+    def artifact_ref(self, version: str) -> ArtifactRef:
+        manifest = self.read(version)
+        try:
+            content_id = manifest["content_id"]
+            if not isinstance(content_id, str):
+                raise TypeError("content_id must be a string")
+            parent_release_id = manifest.get("parent_release_id")
+            if parent_release_id is not None and not isinstance(parent_release_id, str):
+                raise TypeError("parent_release_id must be a string or null")
+            return ArtifactRef(
+                content_id=content_id,
+                release_id=self._workspace.fetch_version(version),
+                parent_release_id=parent_release_id,
+            )
+        except (KeyError, TypeError) as exc:
+            raise ArtifactSourceError(f"invalid artifact manifest at {version}") from exc
+
+
+class GitLFSRepositoryBackend(StagedReleaseRepositoryBackend):
+    def __init__(
+        self,
+        scenario: str,
+        repository: str | Path,
+        bootstrap_artifact: str | None = None,
+        *,
+        work_dir: Path,
+        cache_dir: Path,
+        snapshot_download: Callable[..., str] | None = None,
+        bootstrap_files: Mapping[str, str] | None = None,
+        bootstrap_subdirectory: str | None = None,
+    ) -> None:
+        if not scenario:
+            raise ValueError("scenario must be non-empty")
+        if bootstrap_subdirectory is not None:
+            validate_component_name(bootstrap_subdirectory)
+        _check_tools()
+        encoded = base64.urlsafe_b64encode(scenario.encode()).decode().rstrip("=")
+        self.ref_name = f"refs/reef/scenarios/{encoded}"
+        self.work_dir = Path(work_dir)
+        self.cache_dir = Path(cache_dir)
+        self.work_dir.mkdir(parents=True, exist_ok=True)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._git_client = GitClient(self.work_dir / "repository")
+        local_repository = repository if isinstance(repository, Path) else None
+        if local_repository is not None and not local_repository.exists():
+            _initialize_local_repository(local_repository, self._git_client)
+        self.repository = str(repository)
+        self._workspace = _GitWorkspace(
+            repository=self.repository,
+            work_dir=self.work_dir,
+            git_client=self._git_client,
+        )
+        self._manifest = _ArtifactManifest(self._workspace)
+        self._open_repository()
+        if bootstrap_artifact is not None:
+            self._bootstrap(
+                bootstrap_artifact,
+                snapshot_download=snapshot_download,
+                subdirectory=bootstrap_subdirectory,
+                files=bootstrap_files or {},
+            )
+        elif local_repository is not None:
+            self._bootstrap_empty(bootstrap_files or {})
+
+    @classmethod
+    def factory(
+        cls,
+        repository: str | Path,
+        bootstrap_artifact: str | None = None,
+        *,
+        work_dir: Path,
+        cache_dir: Path,
+        snapshot_download: Callable[..., str] | None = None,
+        bootstrap_files: Mapping[str, str] | None = None,
+        bootstrap_subdirectory: str | None = None,
+    ) -> CachedRepositoryBackendFactory:
+        """A factory of scenario backends over one repository.
+
+        ``bootstrap_subdirectory`` names the release component a bootstrap
+        model snapshot belongs to: a multi-component scenario keeps one
+        directory per component, so the snapshot goes under that directory
+        while ``bootstrap_files`` seed the others beside it.
+        """
+        _check_tools()
+        return _GitLFSRepositoryBackendFactory(
+            cls,
+            repository,
+            bootstrap_artifact,
+            work_dir=work_dir,
+            cache_dir=cache_dir,
+            snapshot_download=snapshot_download,
+            bootstrap_files=bootstrap_files,
+            bootstrap_subdirectory=bootstrap_subdirectory,
+        )
+
+    def resolve_release(self, release_id: str | None = None) -> ArtifactRef:
+        if release_id is None or release_id == "head":
+            resolved_release = self._workspace.ls_remote("refs/reef/head") or self._workspace.ls_remote(
+                "refs/reef/base"
+            )
+            if resolved_release is None:
+                raise ArtifactNotFound("artifact repository has no head release")
+            return self._manifest.artifact_ref(resolved_release)
+        selector = release_id.removeprefix("git+lfs://")
+        resolved_release = self._workspace.ls_remote(f"refs/reef/releases/{selector}")
+        if resolved_release is None:
+            try:
+                resolved_release = self._workspace.fetch_version(selector)
+            except ArtifactPublicationError as exc:
+                raise ArtifactNotFound(f"release does not exist: {release_id}") from exc
+        return self._manifest.artifact_ref(resolved_release)
+
+    def fork(
+        self,
+        release_id: str | None = None,
+        *,
+        metadata: Mapping[str, object] | None = None,
+    ) -> ArtifactRef:
+        with self._workspace.lock:
+            existing = self._workspace.ls_remote(self.ref_name)
+            if existing is not None:
+                return self._manifest.artifact_ref(existing)
+            selected = self.resolve_release(release_id)
+            self._workspace.checkout(selected.release_id)
+            self._workspace.fetch_lfs_objects(selected.release_id)
+            self._manifest.write(
+                content_id=selected.content_id,
+                parent_release_id=selected.release_id,
+                source={"kind": "fork", "release_id": selected.release_id},
+                metadata=metadata or {},
+            )
+            commit = self._workspace.commit("fork scenario repository")
+            try:
+                self._workspace.push(f"{commit}:{self.ref_name}")
+            except ArtifactPublicationError:
+                existing = self._workspace.ls_remote(self.ref_name)
+                if existing is None:
+                    raise
+                return self._manifest.artifact_ref(existing)
+            return self._manifest.artifact_ref(commit)
+
+    def metadata(self) -> Mapping[str, object] | None:
+        version = self._workspace.ls_remote(self.ref_name)
+        if version is None:
+            return None
+        manifest = self._manifest.read(version)
+        metadata = manifest.get("metadata", {})
+        if not isinstance(metadata, Mapping):
+            raise ArtifactSourceError(f"invalid artifact metadata at {version}")
+        return dict(metadata)
+
+    def current(self) -> ArtifactRef:
+        version = self._workspace.ls_remote(self.ref_name)
+        if version is None:
+            raise ArtifactNotFound("repository has no current artifact")
+        return self._manifest.artifact_ref(version)
+
+    def materialize(self, ref: ArtifactRef) -> Artifact:
+        destination = self.cache_dir / ref.release_id
+        if destination.is_dir():
+            return Artifact(ref, None, local_path=destination, metadata=materialized_metadata(destination))
+        temporary = Path(tempfile.mkdtemp(prefix=f".{ref.release_id}-", dir=self.cache_dir))
+        checkout = temporary / "artifact"
+        try:
+            self._workspace.clone_for_materialize(checkout, ref.release_id)
+            git_metadata = checkout / ".git"
+            if git_metadata.is_dir():
+                shutil.rmtree(git_metadata)
+            else:
+                git_metadata.unlink(missing_ok=True)
+            try:
+                checkout.rename(destination)
+            except OSError:
+                if not destination.is_dir():
+                    raise
+        except ArtifactPublicationError as exc:
+            raise ArtifactMaterializationError(f"failed to materialize artifact {ref.release_id}: {exc}") from exc
+        finally:
+            shutil.rmtree(temporary, ignore_errors=True)
+        if not destination.is_dir():
+            raise ArtifactMaterializationError(f"artifact cache was not created: {ref.release_id}")
+        return Artifact(ref, None, local_path=destination, metadata=materialized_metadata(destination))
+
+    def publish(
+        self,
+        artifact: Artifact,
+        *,
+        expected_parent: ArtifactRef,
+        advance_head: bool = True,
+    ) -> ArtifactRef:
+        if artifact.local_path is None or not artifact.local_path.is_dir():
+            raise ArtifactPublicationError("artifact ref must contain an existing local artifact directory")
+        with self._workspace.lock:
+            current = self._workspace.ls_remote(self.ref_name)
+            if current != expected_parent.release_id:
+                raise ArtifactConflict(f"repository is at {current}, not expected parent {expected_parent.release_id}")
+            files = {
+                ".gitattributes": _LFS_ATTRIBUTES,
+                _MANIFEST: _ArtifactManifest.text(
+                    content_id=artifact.ref.content_id,
+                    parent_release_id=expected_parent.release_id,
+                    source={"kind": "training"},
+                    metadata=artifact.metadata,
+                ),
+            }
+            paths = tuple(path for path in self._workspace.source_files(artifact.local_path) if path not in files)
+            linked = any((artifact.local_path / path).is_symlink() for path in paths)
+            if linked:
+                # A symlinked tree is published by its targets' bytes, which only a copy into the work tree resolves.
+                self._workspace.checkout(expected_parent.release_id)
+                self._workspace.replace_tree(artifact.local_path)
+                for path, text in files.items():
+                    write_fresh(self._workspace.clone_dir / path, text)
+                commit = self._workspace.commit("publish artifact")
+            else:
+                commit = self._workspace.commit_files(
+                    artifact.local_path,
+                    paths,
+                    parent=expected_parent.release_id,
+                    carried_from=self.cache_dir / expected_parent.release_id,
+                    files=files,
+                    message="publish artifact",
+                )
+            if not advance_head:
+                # A pending release lives under the releases namespace; the branch and refs/reef/head stay put.
+                self._workspace.push(f"+{commit}:refs/reef/releases/{commit}")
+                if not linked:
+                    self._cache_release(commit, artifact.local_path, paths, files)
+                return self._manifest.artifact_ref(commit)
+            try:
+                self._workspace.force_push_with_lease(
+                    f"--force-with-lease={self.ref_name}:{expected_parent.release_id}",
+                    f"{commit}:{self.ref_name}",
+                    f"+{commit}:refs/reef/head",
+                )
+            except ArtifactPublicationError as exc:
+                current = self._workspace.ls_remote(self.ref_name)
+                if current != expected_parent.release_id:
+                    raise ArtifactConflict(f"repository advanced from {expected_parent.release_id}") from exc
+                raise
+            if not linked:
+                self._cache_release(commit, artifact.local_path, paths, files)
+            return self._manifest.artifact_ref(commit)
+
+    def _cache_release(self, release_id: str, source: Path, paths: Sequence[str], files: Mapping[str, str]) -> None:
+        """Fill a just-published release's cache entry from the staged tree it was committed from.
+
+        The staged files hold the committed bytes, so the entry links them
+        instead of cloning the release and pulling its LFS objects back. An
+        entry that cannot be filled is cloned by the first ``materialize``.
+        """
+        destination = self.cache_dir / release_id
+        if destination.is_dir():
+            return
+        temporary = Path(tempfile.mkdtemp(prefix=f".{release_id}-", dir=self.cache_dir))
+        tree = temporary / "artifact"
+        try:
+            tree.mkdir()
+            for path in paths:
+                (tree / path).parent.mkdir(parents=True, exist_ok=True)
+                link_or_copy(str(source / path), str(tree / path))
+            for path, text in files.items():
+                (tree / path).write_text(text, encoding="utf-8")
+            tree.rename(destination)
+        except OSError:
+            pass
+        finally:
+            shutil.rmtree(temporary, ignore_errors=True)
+
+    def commit_release(self, ref: ArtifactRef, *, expected_parent: ArtifactRef) -> None:
+        with self._workspace.lock:
+            staged = self.resolve_release(ref.release_id)
+            if staged != ref or ref.parent_release_id != expected_parent.release_id:
+                raise ArtifactPublicationError("committed release differs from its staged identity or parent")
+            current = self._workspace.ls_remote(self.ref_name)
+            if current == ref.release_id:
+                return
+            if current != expected_parent.release_id:
+                raise ArtifactConflict("repository head changed before the staged release was committed")
+            try:
+                self._workspace.force_push_with_lease(
+                    f"--force-with-lease={self.ref_name}:{expected_parent.release_id}",
+                    f"{ref.release_id}:{self.ref_name}",
+                    f"+{ref.release_id}:refs/reef/head",
+                )
+            except ArtifactPublicationError as exc:
+                current = self._workspace.ls_remote(self.ref_name)
+                if current == ref.release_id:
+                    return
+                if current != expected_parent.release_id:
+                    raise ArtifactConflict("repository head changed while committing a staged release") from exc
+                raise
+
+    def _bootstrap(
+        self,
+        artifact_source: str,
+        *,
+        snapshot_download: Callable[..., str] | None,
+        subdirectory: str | None = None,
+        files: Mapping[str, str] = {},
+    ) -> ArtifactRef:
+        """The base release from a model snapshot, under ``subdirectory`` when named, with ``files`` beside it."""
+        source = parse_artifact_source(artifact_source)
+        if isinstance(source, GitVersionSource):
+            version = self._workspace.fetch_version(source.version)
+            self._workspace.push(f"+{version}:refs/reef/head")
+            return self._manifest.artifact_ref(version)
+        existing = self._workspace.ls_remote("refs/reef/base")
+        if existing is not None:
+            if self._workspace.ls_remote("refs/reef/head") is None:
+                self._workspace.push(f"{existing}:refs/reef/head")
+            return self._manifest.artifact_ref(existing)
+        downloaded = download_huggingface_snapshot(
+            source,
+            snapshot_download=snapshot_download,
+        )
+        with self._workspace.lock:
+            self._workspace.orphan_checkout()
+            self._workspace.replace_tree(downloaded.local_path, subdirectory=subdirectory)
+            for relative, text in files.items():
+                target = self._workspace.clone_dir / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                write_fresh(target, text)
+            self._workspace.write_lfs_attributes()
+            self._manifest.write(
+                content_id=f"content:{uuid.uuid4().hex}",
+                parent_release_id=None,
+                source={
+                    "kind": "huggingface",
+                    "name": source.model_name,
+                    "version": downloaded.version,
+                    **({} if subdirectory is None else {"component": subdirectory}),
+                },
+                metadata={},
+            )
+            commit = self._workspace.commit("import bootstrap artifact")
+            self._workspace.push(
+                f"{commit}:refs/reef/base",
+                f"{commit}:refs/reef/head",
+            )
+            return self._manifest.artifact_ref(commit)
+
+    def _bootstrap_empty(self, files: Mapping[str, str] = {}) -> ArtifactRef:
+        """The base artifact of a local repository: ``files`` when the recipe seeds one, else empty.
+
+        An existing base always wins, so a redeploy with a changed seed keeps
+        the base its scenarios forked from."""
+        existing = self._bootstrap_ref()
+        if existing is not None:
+            return existing
+        if self._workspace.has_refs():
+            existing = self._bootstrap_ref()
+            if existing is not None:
+                return existing
+            raise ArtifactSourceError("artifact repository has refs but no base or head release")
+        with self._workspace.lock:
+            self._workspace.orphan_checkout()
+            for relative, text in files.items():
+                target = self._workspace.clone_dir / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                write_fresh(target, text)
+            self._manifest.write(
+                content_id=f"content:{uuid.uuid4().hex}",
+                parent_release_id=None,
+                source={"kind": "seed" if files else "empty"},
+                metadata={},
+            )
+            commit = self._workspace.commit("initialize artifact repository")
+            try:
+                self._workspace.push(f"{commit}:refs/reef/base")
+                base = commit
+            except ArtifactPublicationError:
+                winner = self._workspace.ls_remote("refs/reef/base")
+                if winner is None:
+                    raise
+                base = winner
+            return self._manifest.artifact_ref(self._restore_head(base))
+
+    def _bootstrap_ref(self) -> ArtifactRef | None:
+        base = self._workspace.ls_remote("refs/reef/base")
+        head = self._workspace.ls_remote("refs/reef/head")
+        if base is not None:
+            return self._manifest.artifact_ref(head or self._restore_head(base))
+        if head is not None:
+            return self._manifest.artifact_ref(head)
+        return None
+
+    def _restore_head(self, base: str) -> str:
+        head = self._workspace.ls_remote("refs/reef/head")
+        if head is not None:
+            return head
+        self._workspace.fetch_version(base)
+        try:
+            self._workspace.push(f"{base}:refs/reef/head")
+            return base
+        except ArtifactPublicationError:
+            head = self._workspace.ls_remote("refs/reef/head")
+            if head is None:
+                raise
+            return head
+
+    def _open_repository(self) -> None:
+        self._workspace.open_repository()
+
+
+class _GitLFSRepositoryBackendFactory(CachedRepositoryBackendFactory):
+    def __init__(
+        self,
+        backend_type: type[GitLFSRepositoryBackend],
+        repository: str | Path,
+        bootstrap_artifact: str | None,
+        *,
+        work_dir: Path,
+        cache_dir: Path,
+        snapshot_download: Callable[..., str] | None,
+        bootstrap_files: Mapping[str, str] | None = None,
+        bootstrap_subdirectory: str | None = None,
+    ) -> None:
+        super().__init__()
+        self._backend_type = backend_type
+        self._repository = repository
+        self._bootstrap_artifact = bootstrap_artifact
+        self._work_dir = Path(work_dir)
+        self._cache_dir = Path(cache_dir)
+        self._snapshot_download = snapshot_download
+        self._bootstrap_files = None if bootstrap_files is None else dict(bootstrap_files)
+        self.bootstrap_subdirectory = bootstrap_subdirectory
+
+    def _build_backend(self, scenario: str) -> GitLFSRepositoryBackend:
+        encoded = base64.urlsafe_b64encode(scenario.encode()).decode().rstrip("=")
+        return self._backend_type(
+            scenario,
+            self._repository,
+            self._bootstrap_artifact,
+            work_dir=self._work_dir / encoded,
+            cache_dir=self._cache_dir,
+            snapshot_download=self._snapshot_download,
+            bootstrap_files=self._bootstrap_files,
+            bootstrap_subdirectory=self.bootstrap_subdirectory,
+        )
+
+    def _has_persisted_registration(self, scenario: str) -> bool:
+        if isinstance(self._repository, Path) and not self._repository.exists():
+            return False
+        encoded = base64.urlsafe_b64encode(scenario.encode()).decode().rstrip("=")
+        ref_name = f"refs/reef/scenarios/{encoded}"
+        output = GitClient(self._work_dir / ".registration-check").run(
+            ("git", "ls-remote", str(self._repository), ref_name),
+            source_error=True,
+        )
+        return bool(output)
+
+    def _archive_persisted_registration(self, scenario: str) -> tuple[str, ...]:
+        """Rename the scenario's ref into ``refs/reef/archived/<scenario>/<time>`` and drop its work clone.
+
+        The commits stay reachable under the archived ref, so nothing the
+        scenario published is lost; ``refs/reef/base``, ``refs/reef/head`` and
+        the pending releases are shared with other scenarios and stay. Only a
+        local bare repository can be renamed in place.
+        """
+        if not isinstance(self._repository, Path):
+            raise NotImplementedError("archiving a scenario needs a local artifact repository")
+        encoded = base64.urlsafe_b64encode(scenario.encode()).decode().rstrip("=")
+        archived: list[str] = []
+        ref_name = f"refs/reef/scenarios/{encoded}"
+        if self._repository.exists():
+            client = GitClient(self._work_dir / ".registration-check")
+            git_dir = ("git", "--git-dir", str(self._repository))
+            sha = client.run((*git_dir, "rev-parse", "--verify", "--quiet", ref_name), source_error=True)
+            if sha:
+                stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+                archived_ref = f"refs/reef/archived/{encoded}/{stamp}"
+                client.run((*git_dir, "update-ref", archived_ref, sha), source_error=True)
+                client.run((*git_dir, "update-ref", "-d", ref_name, sha), source_error=True)
+                archived.append(archived_ref)
+        work_dir = self._work_dir / encoded
+        if work_dir.exists():
+            shutil.rmtree(work_dir, ignore_errors=True)
+            archived.append(str(work_dir))
+        return tuple(archived)
+
+    def _list_persisted_registrations(self) -> tuple[str, ...]:
+        if isinstance(self._repository, Path) and not self._repository.exists():
+            return ()
+        output = GitClient(self._work_dir / ".registration-check").run(
+            ("git", "ls-remote", str(self._repository), "refs/reef/scenarios/*"),
+            source_error=True,
+        )
+        names = []
+        for line in output.splitlines():
+            encoded = line.split("refs/reef/scenarios/")[-1].strip()
+            if not encoded:
+                continue
+            padded = encoded + "=" * (-len(encoded) % 4)
+            try:
+                names.append(base64.urlsafe_b64decode(padded).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                continue
+        return tuple(names)

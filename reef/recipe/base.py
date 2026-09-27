@@ -1,0 +1,580 @@
+"""Base recipe contracts shared by every concrete recipe.
+
+``Recipe`` is both the default record-only recipe and the base class for every
+specialized recipe; ``WeightTrainingRecipe`` narrows the contract for recipes whose
+backend updates model weights.
+"""
+
+from __future__ import annotations
+
+import os
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
+from pathlib import Path
+from typing import Any, ClassVar
+
+from reef.artifact.artifact import Artifact, ArtifactValidator
+from reef.core.components import RECORDS_COMPONENT
+from reef.core.reports import ReportBase
+from reef.inference.http import resolve_proxy_runtime
+from reef.inference.model_config import ModelConfig
+from reef.observability import ExperimentLogger
+from reef.recipe.checkpoint_strategy import CheckpointStrategy, EveryNVersions
+from reef.recipe.config import config_positive_int
+from reef.recipe.config_fields import config_field, parse_int, recipe_config_fields, resolve_config_field_values
+from reef.recipe.errors import RecipeConfigError
+from reef.runtime.interfaces import InferenceHandler, InferenceRuntime, MultimodalRelay, TrainingRuntime
+from reef.storage.records import RecordStore
+from reef.surface.base import AcceptAnyArtifact, Surface
+from reef.surface.weights import create_weight_surface
+from reef.train.algos import StepScheduling
+from reef.train.algos.registry import resolve_objective
+from reef.train.evaluation import CandidateEvaluationConfig, CandidateEvaluationConfigError, build_candidate_evaluation
+from reef.train.processors.base import DataProcessor
+from reef.train.trainer import ComponentTrainer, Trainer
+
+
+@dataclass(frozen=True)
+class EveryCheck(ArtifactValidator):
+    """Admit an artifact only when every check admits it, in order."""
+
+    checks: tuple[ArtifactValidator, ...]
+
+    def validate(self, artifact: Artifact) -> None:
+        for check in self.checks:
+            check.validate(artifact)
+
+
+def every_check(*checks: ArtifactValidator) -> ArtifactValidator:
+    """One check that admits an artifact only when each of ``checks`` does; a check that admits anything is left out."""
+    kept = tuple(check for check in checks if not isinstance(check, AcceptAnyArtifact))
+    if not kept:
+        return AcceptAnyArtifact()
+    return kept[0] if len(kept) == 1 else EveryCheck(kept)
+
+
+@dataclass(frozen=True)
+class ServedEndpoint:
+    """Where this Reef answers inference itself: what a recipe's own evaluation calls target.
+
+    ``url`` is the service's base URL and ``token`` a bearer token it accepts.
+    ``component`` names the release component the recipe evolves when it is
+    one of several: its evaluation calls then leave that component's served
+    hooks out, since the episode runs a candidate of it.
+    """
+
+    url: str
+    token: str | None = None
+    component: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.url, str) or not self.url.strip():
+            raise ValueError("served endpoint requires a url")
+        object.__setattr__(self, "url", self.url.strip().rstrip("/"))
+
+
+@dataclass(frozen=True, kw_only=True)
+class Recipe:
+    """Default inference recipe and base contract for update recipes.
+
+    Instantiating ``Recipe`` directly records traffic without producing update
+    batches. Specialized recipes are frozen dataclasses over this base: they
+    add their own fields, override ``build`` and, when needed, narrow the
+    ``runtime`` field.
+    """
+
+    config_sections: ClassVar[tuple[str, ...]] = ()
+    """Opaque config sections validated by the recipe alongside its declared fields."""
+
+    name: str = "recipe"
+    runtime: InferenceRuntime | None = None
+    training_runtime: TrainingRuntime | None = None
+
+    def scenario_state_dirs(self, scenario: str) -> tuple[Path, ...]:
+        """Directories that belong to one scenario alone, archived when the scenario is deleted; none by default."""
+        return ()
+
+    checkpoint_strategy: CheckpointStrategy = field(default_factory=lambda: EveryNVersions(1))
+    training_mode: str = config_field("auto")
+
+    def __post_init__(self) -> None:
+        if self.training_mode not in ("auto", "manual", "hybrid"):
+            raise ValueError("training_mode must be 'auto', 'manual' or 'hybrid'")
+
+    def with_model_config(self, config: ModelConfig) -> Recipe:
+        """Bind model settings supplied for this scenario."""
+        if config.runtime is not None and self.training_runtime is not None:
+            raise RecipeConfigError("model overrides require an inference-only runtime")
+        return self
+
+    @classmethod
+    def from_environment(
+        cls,
+        environ: Mapping[str, str] | None = None,
+        *,
+        config: Mapping[str, Any] | None = None,
+        runtime: InferenceRuntime | None = None,
+        training_runtime: TrainingRuntime | None = None,
+    ) -> Recipe:
+        values = os.environ if environ is None else environ
+        settings = config or {}
+        resolved = resolve_config_field_values(cls, settings.get("data", {}), values)
+        return cls.from_resolved_config(
+            settings, resolved, environ=values, runtime=runtime, training_runtime=training_runtime
+        )
+
+    @classmethod
+    def from_resolved_config(
+        cls,
+        config: Mapping[str, Any],
+        field_values: Mapping[str, Any],
+        *,
+        environ: Mapping[str, str],
+        runtime: InferenceRuntime | None = None,
+        training_runtime: TrainingRuntime | None = None,
+    ) -> Recipe:
+        """Construct from values resolved before runtime allocation.
+
+        ``field_values`` comes from ``resolve_config_field_values``. Domain
+        validation still runs in the constructor; no environment is re-read.
+        """
+        artifact = config.get("artifact", {})
+        try:
+            return cls(
+                **cls._recipe_kwargs(config, environ),
+                checkpoint_strategy=EveryNVersions(config_positive_int(artifact, "checkpoint_every_n_versions", 1)),
+                runtime=cls._resolve_runtime(environ, runtime),
+                training_runtime=training_runtime,
+                **field_values,
+            )
+        except ValueError as exc:
+            raise RecipeConfigError(f"invalid {cls.__name__} configuration: {exc}") from exc
+
+    @classmethod
+    def _resolve_runtime(cls, values: Mapping[str, str], runtime: InferenceRuntime | None) -> InferenceRuntime | None:
+        return resolve_proxy_runtime(values, runtime)
+
+    @classmethod
+    def _recipe_kwargs(cls, settings: Mapping[str, Any], values: Mapping[str, str]) -> dict[str, Any]:
+        """Recipe-specific keyword arguments resolved from config sections."""
+        return {}
+
+    @classmethod
+    def select_weight_training(
+        cls, config: Mapping[str, Any]
+    ) -> tuple[type[WeightTrainingRecipe], Mapping[str, Any]] | None:
+        """The weight training recipe class a deployment of this class trains with, and that recipe's own config.
+
+        Read from ``config`` alone, before anything is constructed: the service
+        decides from it whether to connect a training runtime and launch a
+        training backend. ``None`` for a recipe that trains no weights.
+        """
+        return None
+
+    def with_served_endpoint(self, endpoint: ServedEndpoint) -> Recipe:
+        """This recipe told where the service answers inference; the default has no calls of its own to point there."""
+        return self
+
+    @property
+    def report_type(self) -> type[ReportBase] | None:
+        """The typed external-report contract this recipe accepts.
+
+        Recipes that consume reports override this property with their
+        concrete :class:`~reef.core.reports.ReportBase` subclass. ``None`` keeps
+        ingress open for record-only and computed-feedback recipes. This is a
+        runtime capability, not a dataclass field or recipe configuration.
+        """
+        return None
+
+    def build(
+        self,
+        scenario: str,
+        records: RecordStore,
+        *,
+        algorithm_state: Mapping[str, Any] | None = None,
+        experiment_logger: ExperimentLogger | None = None,
+    ) -> Trainer:
+        return Trainer.build(
+            scenario,
+            records,
+            processor_factory=DataProcessor,
+            algorithm_state=algorithm_state,
+            report_type=self.report_type,
+            experiment_logger=experiment_logger,
+            training_mode=self.training_mode,
+        )
+
+    def build_trainers(
+        self,
+        scenario: str,
+        records: RecordStore,
+        *,
+        surface: Surface,
+        algorithm_states: Mapping[str, Mapping[str, Any] | None],
+        experiment_logger: ExperimentLogger | None = None,
+    ) -> tuple[ComponentTrainer, ...]:
+        """Build every trainer of the named scenario, each bound to the component it evolves.
+
+        The default builds the one trainer :meth:`build` returns and binds it
+        to the surface's only component (``records`` when the surface serves
+        none). A recipe whose surface declares several components overrides
+        this to return one trainer per component; the scenario runs them as
+        independent workers that meet at the commit boundary, and
+        ``algorithm_states`` carries each one's recovered state under its
+        component name.
+        """
+        if len(surface.names) > 1:
+            raise RecipeConfigError(
+                f"{type(self).__name__} serves components {list(surface.names)}: override build_trainers "
+                "to bind one trainer per component"
+            )
+        component = surface.names[0] if surface.names else RECORDS_COMPONENT
+        return (
+            ComponentTrainer(
+                component,
+                self.build(
+                    scenario,
+                    records,
+                    algorithm_state=algorithm_states.get(component),
+                    experiment_logger=experiment_logger,
+                ),
+            ),
+        )
+
+    @property
+    def inference_handler(self) -> InferenceHandler | None:
+        """The inference backend composed by this recipe's runtime, if any.
+
+        Use ``runtime`` for the runtime itself.
+        """
+        runtime = self.runtime
+        return runtime.inference_handler if runtime is not None else None
+
+    @property
+    def multimodal_relay(self) -> MultimodalRelay | None:
+        """Where this recipe's scenarios send multimodal calls, or ``None`` when it offers none (the default)."""
+        return None
+
+    def build_surface(self, scenario: str) -> Surface:
+        """Build the serving surface for the named scenario.
+
+        The surface names the release's components and binds each one's
+        capabilities, including the admission check run before that component
+        is published or restored. Most recipes ignore ``scenario``; recipes
+        whose serving state is scenario-specific (an adapter on a shared
+        engine) route by it.
+        """
+        return Surface()
+
+    def build_artifact_validator(self) -> ArtifactValidator:
+        """An admission check run beside the component's own before the recipe's release is published or restored.
+
+        Kept for recipes written before admission moved onto the component
+        surface (``ComponentSurface.validator``, where a new recipe binds it):
+        it joins the check of the one component the recipe serves, and on a
+        recipe that serves none it admits the release as a whole; inside a
+        composite that recipe's release is its component, so the check joins
+        that component's. A recipe that overrides it while serving several
+        components is refused at build, since the check could not say which
+        component it admits.
+        """
+        return AcceptAnyArtifact()
+
+    def serving_surface(self, scenario: str) -> Surface:
+        """``build_surface`` with ``build_artifact_validator`` joined to the served component's check."""
+        surface = self.build_surface(scenario)
+        if type(self).build_artifact_validator is Recipe.build_artifact_validator:
+            return surface
+        if not surface.components:
+            # A release with no component is admitted as a whole, as it was before components existed.
+            return replace(surface, validator=every_check(surface.validator, self.build_artifact_validator()))
+        if len(surface.components) != 1:
+            raise RecipeConfigError(
+                f"{type(self).__name__} overrides build_artifact_validator but serves components "
+                f"{list(surface.names)}: bind the check on each component's ComponentSurface.validator instead"
+            )
+        ((name, component),) = surface.components.items()
+        checks = every_check(component.validator, self.build_artifact_validator())
+        return replace(surface, components={name: replace(component, validator=checks)})
+
+    def base_artifact_files(self) -> Mapping[str, str] | None:
+        """The files a fresh scenario's base artifact starts with, or ``None`` for a recipe with no tree."""
+        return None
+
+    def bootstrap_artifact_component(self) -> str | None:
+        """The release component a bootstrap model snapshot belongs to; ``None`` places it at the release root."""
+        return None
+
+    def serving_status(self) -> Mapping[str, Any] | None:
+        """Runtime-wide serving state this recipe owns, for ``/reef/status``.
+
+        ``None`` when the recipe has nothing beyond per-scenario training
+        state to report.
+        """
+        return None
+
+
+@dataclass(frozen=True)
+class WeightTrainingSpec:
+    """Static machinery a weight-training recipe binds to its configuration.
+
+    Keeping the binding behind one explicit hook leaves the recipe dataclass
+    to describe instance configuration only. The service and training driver
+    can still inspect a recipe class without constructing it.
+
+    ``scheduling`` is how the training runtime cuts each reserved batch into
+    optimizer steps (rollout unit, step size, epochs, shuffle, remainder). It
+    is the recipe's choice, not the objective's; the objective only rejects a
+    schedule its loss cannot train, at build time and again in the backend.
+    """
+
+    objective: str
+    processor: type[DataProcessor] | None = None
+    scheduling: StepScheduling = field(default_factory=StepScheduling)
+
+    @property
+    def loss_family(self) -> str:
+        """The selected objective owns backend loss selection."""
+        return resolve_objective(self.objective).loss_family
+
+
+@dataclass(frozen=True, kw_only=True)
+class WeightTrainingRecipe(Recipe):
+    """Shared recipe contract for backend algorithms that update weights.
+
+    Requires an independent :class:`TrainingRuntime` in ``training_runtime``
+    (the first positional argument of every training recipe).
+
+    :meth:`training_spec` binds the data processor, the training objective, which declares its
+    backend loss family, and the step schedule. Keeping that static machinery in one structured return value
+    means the dataclass fields remain the recipe's instance configuration. The
+    training driver reads the selected class from the same deployment config
+    and obtains its loss family from this hook; deployments do not repeat that
+    binding in an environment variable.
+
+    ``max_staleness`` is the shared stale-sample admission window. Zero keeps
+    exact-version training; a positive value admits same-incarnation samples
+    up to that lag before the existing training path runs.
+
+    ``candidate_evaluation`` is framework-owned configuration derived from an
+    optional top-level ``evaluation`` section. Its dotted factory builds one
+    candidate evaluator per scenario, replacing the backend's default
+    metrics-only evaluator and selection policy without changing the recipe's
+    method-specific config fields.
+
+    Configuration is declared as fields: a config field
+    (``batch_size: int = config_field(128, env="REEF_SAO_BATCH_SIZE")``, see
+    :mod:`reef.recipe.config_fields`) is simultaneously the YAML key, the
+    environment fallback, and the type-aware parser. :meth:`service_config`
+    and :meth:`from_environment` derive everything from those fields, so a
+    recipe never repeats a setting's name or type anywhere else.
+    """
+
+    training_runtime: TrainingRuntime = field(kw_only=False)
+    runtime: InferenceRuntime = field(kw_only=True)
+    max_staleness: int = config_field(0, env="REEF_MAX_STALENESS")
+    candidate_evaluation: CandidateEvaluationConfig | None = field(default=None, repr=False, compare=False)
+
+    @classmethod
+    def training_spec(cls) -> WeightTrainingSpec:
+        """Return the processor, objective and step-schedule binding for this recipe.
+
+        Concrete weight recipes override this hook. A recipe with bespoke
+        trainer wiring may omit ``processor`` and override :meth:`build`.
+        """
+        return WeightTrainingSpec(objective="")
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if not isinstance(self.max_staleness, int) or isinstance(self.max_staleness, bool) or self.max_staleness < 0:
+            raise ValueError("max_staleness must be a non-negative integer")
+        self.resolve_training_runtime(self.training_runtime)
+        if not isinstance(self.runtime, InferenceRuntime):
+            raise RecipeConfigError("weight recipes require an independent inference runtime")
+        runtime_max_staleness = self.training_runtime.max_staleness
+        if runtime_max_staleness != self.max_staleness:
+            raise ValueError(
+                "max_staleness must match the training runtime; "
+                f"recipe={self.max_staleness}, runtime={runtime_max_staleness}"
+            )
+
+    def build_surface(self, scenario: str) -> Surface:
+        if self.training_runtime.concurrent_training_scenarios:
+            # Every scenario owns an adapter on the shared base: route by
+            # scenario and the frozen artifact's publication.
+            return create_weight_surface(scenario=scenario)
+        return create_weight_surface(adapter_name=self.runtime.serving_adapter_name())
+
+    def serving_status(self) -> Mapping[str, Any] | None:
+        """The engine's adapter residency on a runtime that serves per-scenario adapters."""
+        status = self.runtime.adapter_residency_status()
+        return None if status is None else {"adapters": status}
+
+    @classmethod
+    def resolve_training_runtime(cls, runtime: TrainingRuntime | None) -> TrainingRuntime:
+        if runtime is None:
+            raise RecipeConfigError(
+                f"{cls.__name__} requires a training runtime; pass one via the 'training_runtime' argument"
+            )
+        if not isinstance(runtime, TrainingRuntime):
+            raise TypeError(f"{cls.__name__} requires a TrainingRuntime, got {type(runtime).__name__}")
+        return runtime
+
+    @classmethod
+    def select_weight_training(
+        cls, config: Mapping[str, Any]
+    ) -> tuple[type[WeightTrainingRecipe], Mapping[str, Any]] | None:
+        return cls, config
+
+    @classmethod
+    def service_config(cls, settings: Mapping[str, Any], *, model_path: str) -> dict[str, Any]:
+        """Assemble this recipe's ``from_environment`` config from flat service settings.
+
+        ``settings`` is the recipe-owned slice of the deployment's flat
+        ``reef`` section — the caller (``reef.service.assembly``) removes the
+        service's own keys first. Only keys the operator actually set are
+        forwarded, so every default lives with the recipe's own config fields,
+        never in the service layer. This step only translates the layout; shared
+        field resolution performs type conversion before construction. A key this recipe does not declare
+        is a loud error: the operator set a value nothing would consume.
+        """
+        config_fields = recipe_config_fields(cls)
+        data: dict[str, Any] = {}
+        unknown: list[str] = []
+        checkpoint_every: Any = None
+        for key, value in settings.items():
+            if key == "checkpoint_every_n_versions":
+                checkpoint_every = value
+            elif key in config_fields:
+                # A YAML key left empty (None) is unset, not a value to parse.
+                if value is not None:
+                    data[key] = value
+            else:
+                unknown.append(key)
+        if unknown:
+            known = ", ".join(f"reef.{name}" for name in [*sorted(config_fields), "checkpoint_every_n_versions"])
+            raise RecipeConfigError(
+                f"{cls.__name__} does not consume {', '.join(f'reef.{key}' for key in sorted(unknown))}; "
+                f"the recipe would silently run with its defaults instead. "
+                f"Settings {cls.__name__} consumes: {known}. "
+                f"A new setting is declared with config_field() on the recipe dataclass "
+                f"(see reef.recipe.config_fields)."
+            )
+        config: dict[str, Any] = {"data": data, "model": {"path": model_path}}
+        if checkpoint_every is not None:
+            config["artifact"] = {
+                "checkpoint_every_n_versions": parse_int(checkpoint_every, "reef.checkpoint_every_n_versions")
+            }
+        return config
+
+    @classmethod
+    def _recipe_kwargs(cls, settings: Mapping[str, Any], values: Mapping[str, str]) -> dict[str, Any]:
+        cls._validate_config(settings)
+        evaluation = settings.get("evaluation")
+        if evaluation is None:
+            return {}
+        if not isinstance(evaluation, Mapping):
+            raise RecipeConfigError("evaluation must be an object")
+        try:
+            return {"candidate_evaluation": CandidateEvaluationConfig.from_dict(evaluation, environ=values)}
+        except CandidateEvaluationConfigError as exc:
+            raise RecipeConfigError(str(exc)) from exc
+
+    @classmethod
+    def _validate_config(cls, settings: Mapping[str, Any]) -> None:
+        """Internal hook: reject config sections this recipe refuses to own.
+
+        Config field values never come through here; they resolve from
+        their field declarations. This exists only for structural rules such
+        as SAO refusing an ``optimization`` section.
+        """
+
+    def processor_config(self) -> dict[str, Any]:
+        """The config mapping the default :meth:`build` hands the processor.
+
+        Defaults to this recipe's data config field values. The shared
+        ``max_staleness`` field configures the runtime and bridge, not data
+        retention, so it is not included in processor config. Override this
+        method to rename keys or add processor-only entries.
+        """
+        return {
+            name: getattr(self, name)
+            for name in recipe_config_fields(type(self))
+            if name not in ("max_staleness", "training_mode")
+        }
+
+    def build(
+        self,
+        scenario: str,
+        records: RecordStore,
+        *,
+        algorithm_state: Mapping[str, Any] | None = None,
+        experiment_logger: ExperimentLogger | None = None,
+    ) -> Trainer:
+        """Build a trainer from this recipe's processor, objective, and report contract.
+
+        Override with ``Trainer.build`` for bespoke wiring such as a local
+        training backend, and pass :attr:`report_type` through there too.
+        """
+        return self._build_trainer(
+            scenario,
+            records,
+            algorithm_state=algorithm_state,
+            experiment_logger=experiment_logger,
+        )
+
+    def _build_trainer(
+        self,
+        scenario: str,
+        records: RecordStore,
+        *,
+        algorithm_state: Mapping[str, Any] | None,
+        experiment_logger: ExperimentLogger | None = None,
+    ) -> Trainer:
+        """Build the shared weight trainer with this recipe's report contract."""
+        from reef.train.runtime_backend import RuntimeCandidateBackend
+
+        spec = type(self).training_spec()
+        processor_class = spec.processor
+        if processor_class is None:
+            raise TypeError(
+                f"{type(self).__name__} declares no processor: return a DataProcessor subclass "
+                f"as `processor` from training_spec() or override build() for bespoke trainer wiring"
+            )
+        if not spec.objective:
+            raise TypeError(
+                f"{type(self).__name__} declares no objective: return a registered objective name "
+                f"(see reef.train.algos) or a dotted 'module:Objective' path from training_spec(), "
+                f"or override build()"
+            )
+        # Validate the method and its schedule before starting workers. The
+        # runtime carries the reference and the schedule to the backend, which
+        # resolves the objective in its own process before batch partitioning.
+        resolve_objective(spec.objective).validate_scheduling(spec.scheduling)
+        config = self.processor_config()
+        candidate_evaluator = None
+        if self.candidate_evaluation is not None:
+            candidate_evaluator = build_candidate_evaluation(
+                self.candidate_evaluation,
+                runtime=self.runtime,
+                training_runtime=self.training_runtime,
+                scenario=scenario,
+            )
+        return Trainer.build(
+            scenario,
+            records,
+            processor_factory=lambda context: processor_class(context.with_config(config)),
+            candidate_backend=RuntimeCandidateBackend(
+                self.training_runtime,
+                spec.objective,
+                spec.scheduling,
+                inference_runtime=self.runtime,
+                loss_family=spec.loss_family,
+                scenario=scenario,
+            ),
+            candidate_evaluator=candidate_evaluator,
+            algorithm_state=algorithm_state,
+            report_type=self.report_type,
+            experiment_logger=experiment_logger,
+            training_mode=self.training_mode,
+        )

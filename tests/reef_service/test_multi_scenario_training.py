@@ -1,0 +1,200 @@
+"""One training thread, several scenarios, one adapter-serving runtime."""
+
+from __future__ import annotations
+
+import time
+
+import pytest
+from reef_service.test_commit_log import RecordingRuntime, build_training_dispatcher, wait_for_step
+
+from reef.artifact import InMemoryRepositoryBackend
+from reef.core import AgentRecord
+from reef.core.errors import ReefError
+from reef.core.records_types import RequestType
+from reef.surface import adapter_name
+
+
+class AdapterRuntime(RecordingRuntime):
+    """A recording runtime that time-slices one adapter slot between scenarios."""
+
+    def __init__(self) -> None:
+        super().__init__(served_version="w0")
+        self.scenarios: list[str] = []
+        self.adapter_versions: dict[str, str] = {}
+
+    @property
+    def concurrent_training_scenarios(self) -> bool:
+        return True
+
+    def serving_adapter_runtime_load_id(self, scenario: str) -> str | None:
+        return self.adapter_versions.get(scenario)
+
+    def train_candidate(self, payload):
+        self.scenarios.append(payload["scenario"])
+        return super().train_candidate(payload)
+
+    def activate_candidate(self, candidate):
+        activated = super().activate_candidate(candidate)
+        self.adapter_versions[self.scenarios[-1]] = activated.runtime_load_id
+        return activated
+
+
+def _inference(scenario: str, agent_record_id: str) -> AgentRecord:
+    return AgentRecord.create(
+        scenario=scenario,
+        request_type=RequestType.INFERENCE,
+        payload={"tokens": [1, 2], "loss_mask": [0, 1], "rollout_log_probs": [-0.2]},
+        agent_record_id=agent_record_id,
+    )
+
+
+def _report(scenario: str, agent_record_id: str, reference: str) -> AgentRecord:
+    return AgentRecord.create(
+        scenario=scenario,
+        request_type=RequestType.REPORT,
+        payload={"score": 1.0, "references": [reference]},
+        agent_record_id=agent_record_id,
+        references=(reference,),
+    )
+
+
+def _feed(dispatcher, scenario: str, index: int) -> None:
+    dispatcher.accept_record(_inference(scenario, f"{scenario}-i{index}"))
+    dispatcher.accept_record(_report(scenario, f"{scenario}-r{index}", f"{scenario}-i{index}"))
+
+
+@pytest.mark.unit
+def test_two_scenarios_train_through_one_adapter_runtime(tmp_path) -> None:
+    initial = tmp_path / "initial"
+    initial.mkdir()
+    runtime = AdapterRuntime()
+    dispatcher = build_training_dispatcher(
+        runtime, tmp_path, InMemoryRepositoryBackend.factory(initial, root=tmp_path / "repository")
+    )
+    try:
+        _feed(dispatcher, "math", 1)
+        _feed(dispatcher, "code", 1)
+        wait_for_step(dispatcher, 1, scenario="math")
+        wait_for_step(dispatcher, 1, scenario="code")
+        _feed(dispatcher, "code", 2)
+        wait_for_step(dispatcher, 2, scenario="code")
+
+        assert dispatcher._registry.training_scenario_names == ("math", "code")
+        assert runtime.scenarios == ["math", "code", "code"], "every job names the scenario whose adapter it trains"
+        math = dispatcher.get_or_create_scenario("math")
+        code = dispatcher.get_or_create_scenario("code")
+        assert math.scenario_step == 1 and code.scenario_step == 2
+        assert math.current_artifact_ref().runtime_load_id == "w1"
+        assert code.current_artifact_ref().runtime_load_id == "w3"
+
+        status = dispatcher.build_training_status()
+        assert set(status["scenarios"]) == {"math", "code"}
+        assert status["scenarios"]["math"]["adapter_runtime_load_id"] == "w1"
+        assert status["scenarios"]["code"]["adapter_runtime_load_id"] == "w3"
+
+        # Each scenario's surface routes to its own adapter revision.
+        payload = {"messages": []}
+        math_hooks = math.surface.inference
+        code_hooks = code.surface.inference
+        assert math_hooks is not None and code_hooks is not None
+        from reef.artifact import Artifact
+
+        served_math = math_hooks.prepare_request(
+            Artifact(math.current_artifact_ref(), math.repository), "/v1", payload
+        )
+        served_code = code_hooks.prepare_request(
+            Artifact(code.current_artifact_ref(), code.repository), "/v1", payload
+        )
+        assert served_math["lora_path"] == adapter_name("math", "w1")
+        assert served_code["lora_path"] == adapter_name("code", "w3")
+    finally:
+        dispatcher.close()
+
+
+@pytest.mark.unit
+def test_a_full_weight_runtime_still_trains_one_scenario_only(tmp_path) -> None:
+    initial = tmp_path / "initial"
+    initial.mkdir()
+    dispatcher = build_training_dispatcher(
+        RecordingRuntime(), tmp_path, InMemoryRepositoryBackend.factory(initial, root=tmp_path / "repository")
+    )
+    try:
+        dispatcher.get_or_create_scenario("math")
+        with pytest.raises(ReefError, match="already bound"):
+            dispatcher.get_or_create_scenario("code")
+    finally:
+        dispatcher.close()
+
+
+class _PayloadRecordingRuntime(RecordingRuntime):
+    """A full weight runtime that keeps every payload it was asked to train."""
+
+    def __init__(self) -> None:
+        super().__init__(served_version="w0")
+        self.payloads: list[dict] = []
+
+    def train_candidate(self, payload):
+        self.payloads.append(dict(payload))
+        return super().train_candidate(payload)
+
+
+@pytest.mark.unit
+def test_every_job_names_its_owner_and_only_an_adapter_runtime_gets_the_slot_scenario(tmp_path) -> None:
+    """The job marker names the scenario that owns the job, on a full weight runtime too, so a delete never has to
+    guess whose job is out; only a runtime training several scenarios gets the scenario that picks its slot."""
+    full, adapters = _PayloadRecordingRuntime(), AdapterRuntime()
+    for runtime, scenario in ((full, "math"), (adapters, "code")):
+        initial = tmp_path / scenario / "initial"
+        initial.mkdir(parents=True)
+        dispatcher = build_training_dispatcher(
+            runtime, tmp_path / scenario, InMemoryRepositoryBackend.factory(initial, root=tmp_path / scenario / "repo")
+        )
+        try:
+            _feed(dispatcher, scenario, 1)
+            wait_for_step(dispatcher, 1, scenario=scenario)
+        finally:
+            dispatcher.close()
+    assert [payload["owner"] for payload in full.payloads] == ["math"]
+    assert all("scenario" not in payload for payload in full.payloads)
+    assert adapters.scenarios == ["code"]
+
+
+@pytest.mark.unit
+def test_one_scenarios_failure_reloads_only_that_scenario(tmp_path) -> None:
+    initial = tmp_path / "initial"
+    initial.mkdir()
+
+    class FlakyRuntime(AdapterRuntime):
+        def train_candidate(self, payload):
+            if payload["scenario"] == "code" and not getattr(self, "_failed", False):
+                self._failed = True
+                self.scenarios.append("code")
+                raise RuntimeError("code exploded")
+            return super().train_candidate(payload)
+
+    runtime = FlakyRuntime()
+    dispatcher = build_training_dispatcher(
+        runtime,
+        tmp_path,
+        InMemoryRepositoryBackend.factory(initial, root=tmp_path / "repository"),
+        agent_record_dir=tmp_path / "agent-record",
+    )
+    try:
+        math = dispatcher.get_or_create_scenario("math")
+        code = dispatcher.get_or_create_scenario("code")
+        _feed(dispatcher, "math", 1)
+        _feed(dispatcher, "code", 1)
+        wait_for_step(dispatcher, 1, scenario="math")
+        for _ in range(1000):
+            reloaded_code = dispatcher.get_or_create_scenario("code")
+            if reloaded_code is not code:
+                break
+            time.sleep(0.001)
+        else:
+            raise AssertionError("the failing scenario was not reloaded")
+
+        wait_for_step(dispatcher, 1, scenario="code")
+        assert dispatcher.get_or_create_scenario("math") is math, "code's failure reloaded math"
+        assert math.scenario_step == 1, "math did not retain its committed step"
+    finally:
+        dispatcher.close()

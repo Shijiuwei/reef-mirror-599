@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "reef-sao-imo-answerbench-harness"
+version = "0.1.0"
+description = "SAO functional smoke Harbor agent harness that talks to a Reef service"
+requires-python = ">=3.12"
+dependencies = [
+    "reef-client",
+    "reef-eval[harbor]",
+]
+
+[project.optional-dependencies]
+# Host-side scripts around stream.py: export_problems.py, evaluate.py, plot_*.py.
+stream = ["aiohttp", "datasets", "matplotlib"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["harness*"]

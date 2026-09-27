@@ -1,0 +1,184 @@
+# OpenClaw-RL on reef — next-state binary reward, changes model weights.
+# OpenClawRL Compose owns PRM and user-simulation services independently.
+# Reef assembles driver + HTTP and a local Ray runtime for Slime.
+# The whole method is the cookbook `openclawrl` recipe: its processor
+# correlates sessions from the harness's conversation-unique
+# x-reef-tag-session value, with trace matching as a fallback, and judges next
+# states through the independently deployed PRM endpoint. Clients use reef as their inference
+# endpoint; the example shim only injects Reef routing/correlation headers,
+# and there is no grader proxy.
+#
+# Ports sit in the 2xxxx range: --network host shares the namespace with
+# anything else on the host (e.g. another reef stack on 8900/30000), and
+# Ray reserves 10002-19999 for worker ports.
+# Compose isolates PRM on GPU 1 and the Qwen3-32B user simulator on GPU 2.
+# Reef sees GPUs 3-7: Slime reserves 4 for Megatron (TP4) and 1 for rollout.
+# Physical GPU 0 is left free. External Ray clusters must use a disjoint pool.
+#
+# Hyperparameters mirror the run that reproduced the paper's Table 3
+# (PR #240): Qwen3-4B-Thinking policy/PRM, batch 16, 8192-token responses.
+#
+# Objective mirrors Gen-Verse/OpenClaw-RL: the top-K select loss with the
+# PPO clipped surrogate on both halves, one sample per turn (group size 1 by
+# construction, so rewards pass through raw), eps-clip 0.2/0.28, entropy 0,
+# no ref model. Reef supplies rollout_data externally, so slime's estimator
+# chain never runs — declaring --advantage-estimator here would be inert and
+# would only mislead anyone debugging from the config.
+#
+# Prerequisites:
+#   HF model directory at inference.model-path (bridge mode loads HF weights
+#   directly; no torch_dist conversion needed).
+
+schema-version: 2
+reef:
+  ready-timeout: 3600
+  host: 0.0.0.0
+  port: 28900
+  token: ${REEF_TOKEN}                 # run.sh mints one per run
+inference:
+  num-gpus: "1"
+  tensor-parallel-size: "1"
+  options:
+    router-port: "23000"
+    context-length: "65536"
+    reasoning-parser: "qwen3-thinking"
+    tool-call-parser: "qwen25"
+  model-path: /root/models/Qwen3-4B-Thinking-2507
+  timeout-s: 7200
+  handler-factory: >-
+    reef.inference.sglang.chat.SGLangInferenceHandler
+  handler-config:
+    tool_call_parser: qwen25
+    # Old-policy top-K capture (S^q / ell_old) for the top-K objective.
+    capture_topk: 4
+    # The native /generate path has engine sampling defaults (T=1.0), not
+    # the model generation_config the chat endpoint would apply; pin the
+    # upstream-effective values (Qwen3-4B-Thinking generation_config) so
+    # agent traffic samples at the reference temperature.
+    sampling_defaults:
+      temperature: 0.6
+      top_p: 0.95
+      top_k: 20
+      max_new_tokens: 8192
+recipe:
+  implementation: recipes.openclawrl.recipe:OpenClawRLRecipe
+  config:
+    batch-size: 16                     # MUST equal training.config.global_batch_size
+    checkpoint-every-n-versions: 1
+    # The recipe consumes this external service; Reef does not launch or schedule it.
+    prm-url: http://127.0.0.1:23001
+    prm-tokenizer-path: /root/models/Qwen3-4B-Thinking-2507
+    # Thinking-model PRM under judge load: single votes need minutes. Upstream
+    # never times judge calls out (httpx timeout=None); 3600s is effectively
+    # that while still freeing a truly wedged socket. 300s was punishing long
+    # turns: votes timed out -> 0.0 -> no verdict, so degenerate long replies
+    # escaped the -1 upstream would deliver. (The directive teacher no longer
+    # calls this server at all — candidates go to the train actor's Megatron
+    # teacher pass, which computes exact log-probs on the trainer's own
+    # tempered scale.)
+    prm-timeout-s: 3600
+    prm-max-hint-candidates: 3
+    # The judged population, one JSON line per batch (upstream's
+    # OPENCLAW_PRM_RECORD_FILE). A batch reward mean cannot distinguish
+    # "the judges disagree" from "the judges never ran".
+    prm-record-file: /var/lib/reef/prm-records.jsonl
+training:
+  backend: slime
+  ready-timeout: 900
+  ray-namespace: reef
+  ray-actor-name: reef-train-bridge
+  # A step with long assembled episodes can exceed the 300 s default; a
+  # timed-out worker retry then collides with the still-running job's
+  # RUNNING marker (observed live as "operator recovery required").
+  timeout-s: 7200
+  config:
+    checkpoint_dir: /var/lib/reef/checkpoints
+    checkpoint_retention:
+      max_storage_fraction: 0.80
+      min_free_space_fraction: 0.10
+      policy: latest
+    global_batch_size: 16
+  # Model sizes are derived from HF metadata; tokenizer padding and model-family
+  # flags are explicit here. The loss family supplies its hook paths.
+  options:
+    reef-checkpoint-max-storage-fraction: "${training.config.checkpoint_retention.max_storage_fraction}"
+    reef-checkpoint-min-free-space-fraction: "${training.config.checkpoint_retention.min_free_space_fraction}"
+    reef-checkpoint-policy: "${training.config.checkpoint_retention.policy}"
+    megatron-to-hf-mode: "bridge"
+    hf-checkpoint: "${inference.model-path}"
+    load: "${training.config.checkpoint_dir}/megatron"
+    save: "${training.config.checkpoint_dir}/megatron"
+    save-interval: "100"
+    save-hf: "${training.config.checkpoint_dir}/hf/{rollout_id}"
+    num-rollout: "100000000"
+    rollout-batch-size: "${training.config.global_batch_size}"
+    global-batch-size: "${training.config.global_batch_size}"
+    micro-batch-size: "1"
+    actor-num-nodes: "1"
+    actor-num-gpus-per-node: "4"
+    num-gpus-per-node: "5"
+    tensor-model-parallel-size: "4"
+    pipeline-model-parallel-size: "1"
+    seq-length: "65536"
+    rollout-max-response-len: "8192"
+    rollout-max-context-len: "65536"
+    rotary-base: "5000000"
+    recompute-granularity: "full"
+    recompute-method: "uniform"
+    recompute-num-layers: "1"
+    log-probs-chunk-size: "1024"
+    ckpt-fully-parallel-save: true
+    sequence-parallel: true
+    use-dynamic-batch-size: true
+    max-tokens-per-gpu: "65536"
+    attention-dropout: "0.0"
+    hidden-dropout: "0.0"
+    attention-softmax-in-fp32: true
+    accumulate-allreduce-grads-in-fp32: true
+    attention-backend: "flash"
+    optimizer: "adam"
+    lr: "1e-5"
+    lr-decay-style: "constant"
+    weight-decay: "0.1"
+    adam-beta1: "0.9"
+    adam-beta2: "0.98"
+    loss-type: "custom_loss"
+    eps-clip: "0.2"
+    eps-clip-high: "0.28"
+    entropy-coef: "0.0"
+    n-samples-per-prompt: "1"
+    num-steps-per-rollout: "1"
+    openclawrl-w-rl: "1.0"
+    openclawrl-w-opd: "1.0"
+    openclawrl-adv-diff-clip: "1.0"
+    openclawrl-hint-selection: "sequence_optimal"
+    openclawrl-subset-mode: "student"
+    rollout-temperature: "0.6"
+    padded-vocab-size: "151936"
+    position-embedding-type: "rope"
+    swiglu: true
+    disable-bias-linear: true
+    normalization: "RMSNorm"
+    group-query-attention: true
+    qk-layernorm: true
+storage:
+  artifact-repository: /var/lib/reef/artifacts.git
+  artifact-work-dir: /var/lib/reef/artifact-work
+  artifact-cache-dir: /var/lib/reef/artifact-cache
+  agent-record-dir: /var/lib/reef/agent-record
+
+execution:
+  training: ray
+  rollout: ray
+
+observability:
+  wandb:
+    enabled: false                     # omitted or false means no tracking
+    project: reef
+    # entity: your-team
+    # group_prefix: openclawrl        # produces group openclawrl/<scenario>
+    # name_prefix: openclawrl
+    tags: []
+    mode: online                       # online, offline, or disabled
+    directory: /var/lib/reef/wandb
+    upload_checkpoints: false

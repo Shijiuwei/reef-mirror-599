@@ -1,0 +1,25 @@
+# Local inference (SGLang) — 1+ GPUs, recipe, no training.
+# Reef creates the SGLang and HTTP processes from the inference settings.
+# Set CUDA_VISIBLE_DEVICES=0 to select a particular GPU.
+#
+# inference.model-path accepts a local HF model directory or an HF repo ID
+# (e.g. Qwen/Qwen2.5-7B-Instruct); the repo ID is auto-downloaded on start.
+#
+# Start the configured stack with
+# `reef serve -c recipes/basic/local-sglang.yaml`. Reef waits for the engine
+# before accepting traffic; ${REEF_TOKEN} comes from the environment.
+#   export REEF_TOKEN=$(openssl rand -hex 16)
+
+schema-version: 2
+reef:
+  host: 0.0.0.0
+  port: 8900
+  token: ${REEF_TOKEN}
+inference:
+  model-path: Qwen/Qwen2.5-7B-Instruct
+  backend: sglang
+  tensor-parallel-size: 1
+recipe:
+  implementation: recipe
+storage:
+  agent-record-dir: .reef/agent-record

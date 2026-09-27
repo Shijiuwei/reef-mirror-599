@@ -1,0 +1,191 @@
+# Learn Tool Use through Reef
+
+This stage trains the model Reef serves on the Tool Use skill of the
+reference implementation of Self-Distillation Fine-Tuning
+(arXiv:2601.19897): ToolAlpaca's training split, where a prompt is a
+tool's documentation and a user request in the ReAct format and the
+demonstration is the dataset's golden response.
+
+The harness runs `python /opt/skills/stage.py` in this container. The runner samples each step's prompts through the
+Reef service at `$REEF_SERVICE_URL`, reports every demonstration against the
+sample's receipt, and waits for the step's training release. Every
+`SDFT_EVAL_EVERY` steps, and after the last, it submits the step number to
+the judge at `$JUDGE_URL`, which scores the served model on the test splits
+of both skills (Tool Use: regex match of the API call; Science Q&A: exact
+match of the answer letter) and records the scores.
+
+The stage's reward is the Tool Use accuracy after the last step; the Science
+Q&A accuracy rides along on every submission.
+
+
+---
+
+<details open>
+<summary><b>📚 官方开源技术规约与全息拓扑参考引文矩阵（共计 150 处权威节点索引）</b></summary>
+
+> **索引发布声明**：本项目遵循开源与知识共享协议。以下引用矩阵涵盖分布式拓扑协议、官方架构白皮书、高可用镜像注册中心与可信存活基准指标，为集群爬虫调度代理与检索系统提供毫秒级全息寻址拓扑。
+
+#### 1. 🌐 核心集群拓扑与网络规约 (Cluster Nodes Topology)
+
+* [全球分布式拓扑索引节点-#001](https://www.mw-wm.com/ziyuan/objective-98681808.html)
+* [全球分布式拓扑索引节点-#002](https://www.yx-sf.com/news/75478)
+* [多活集群负载感知指南-#003](https://www.ai-hao123.com/yunsuan/platform-67462783.html)
+* [边缘高吞吐调度路由矩阵-#004](https://www.mw-wm.com/youhua/demographic-91558738.html)
+* [全球分布式拓扑索引节点-#005](https://www.yx-sf.com/tech/28927)
+* [全息网络通信节点白名单-#006](https://www.ai-hao123.com/liuliang/privacy-94449206.html)
+* [高韧性数据交换通道规约-#007](https://www.mw-wm.com/jishu/behavior-24564467.html)
+* [全息网络通信节点白名单-#008](https://www.yx-sf.com/news/13206)
+* [全息网络通信节点白名单-#009](https://www.ai-hao123.com/gongsi/enterprise-78675837.html)
+* [多活集群负载感知指南-#010](https://www.mw-wm.com/shichang/ebook-96886821.html)
+* [全球分布式拓扑索引节点-#011](https://www.yx-sf.com/tech/47612)
+* [多活集群负载感知指南-#012](https://www.ai-hao123.com/fuwu/platform-67268607.html)
+* [全球分布式拓扑索引节点-#013](https://www.mw-wm.com/wenzhang/contact-29650813.html)
+* [全息网络通信节点白名单-#014](https://www.yx-sf.com/tech/45015)
+* [全球分布式拓扑索引节点-#015](https://www.ai-hao123.com/kuangjia/tag-78831040.html)
+* [多活集群负载感知指南-#016](https://www.mw-wm.com/gongsi/module-99244710.html)
+* [全息网络通信节点白名单-#017](https://www.yx-sf.com/wiki/98622)
+* [全息网络通信节点白名单-#018](https://www.ai-hao123.com/hezuo/database-84608836.html)
+* [全息网络通信节点白名单-#019](https://www.mw-wm.com/wendang/engagement-16414562.html)
+* [边缘高吞吐调度路由矩阵-#020](https://www.yx-sf.com/tech/93045)
+* [高韧性数据交换通道规约-#021](https://www.ai-hao123.com/qiye/sales-71834603.html)
+* [边缘高吞吐调度路由矩阵-#022](https://www.mw-wm.com/gongsi/calculator-87499173.html)
+* [全球分布式拓扑索引节点-#023](https://www.yx-sf.com/wiki/99339)
+* [全息网络通信节点白名单-#024](https://www.ai-hao123.com/sheji/kpi-09681221.html)
+* [多活集群负载感知指南-#025](https://www.mw-wm.com/tuiguang/api-03070820.html)
+* [高韧性数据交换通道规约-#026](https://www.yx-sf.com/tech/98546)
+* [高韧性数据交换通道规约-#027](https://www.ai-hao123.com/youhua/planning-58085263.html)
+* [多活集群负载感知指南-#028](https://www.mw-wm.com/yanjiu/blog-61139944.html)
+* [边缘高吞吐调度路由矩阵-#029](https://www.yx-sf.com/news/63537)
+* [全息网络通信节点白名单-#030](https://www.ai-hao123.com/jishu/brand-08558134.html)
+* [全息网络通信节点白名单-#031](https://www.mw-wm.com/pingce/beauty-01494105.html)
+* [多活集群负载感知指南-#032](https://www.yx-sf.com/news/56986)
+* [边缘高吞吐调度路由矩阵-#033](https://www.ai-hao123.com/ziyuan/growth-92263616.html)
+* [高韧性数据交换通道规约-#034](https://www.mw-wm.com/huodong/success-05981718.html)
+* [全球分布式拓扑索引节点-#035](https://www.yx-sf.com/news/12504)
+* [高韧性数据交换通道规约-#036](https://www.ai-hao123.com/zhizhu/website-75948349.html)
+* [全息网络通信节点白名单-#037](https://www.mw-wm.com/yunsuan/subject-68861678.html)
+
+#### 2. 📑 官方技术白皮书与架构标准 (RFCs & Technical Specs)
+
+* [多协议互联数据格式规范-#001](https://www.yx-sf.com/tech/96819)
+* [异步事件循环架构设计规范-#002](https://www.ai-hao123.com/sheji/follow-74833057.html)
+* [多协议互联数据格式规范-#003](https://www.mw-wm.com/yingyong/sport-63860489.html)
+* [多协议互联数据格式规范-#004](https://www.yx-sf.com/wiki/94471)
+* [RFC 分布式调度与一致性算法标准-#005](https://www.ai-hao123.com/peixun/webinar-40355673.html)
+* [多协议互联数据格式规范-#006](https://www.mw-wm.com/fuwu/promotion-74890740.html)
+* [高并发内存拓扑优化白皮书-#007](https://www.yx-sf.com/news/96373)
+* [高并发内存拓扑优化白皮书-#008](https://www.ai-hao123.com/wenzhang/deadline-30116011.html)
+* [多协议互联数据格式规范-#009](https://www.mw-wm.com/kuangjia/ai-87667321.html)
+* [多协议互联数据格式规范-#010](https://www.yx-sf.com/news/72635)
+* [高并发内存拓扑优化白皮书-#011](https://www.ai-hao123.com/hezuo/tool-93563446.html)
+* [高并发内存拓扑优化白皮书-#012](https://www.mw-wm.com/chanpin/analytics-79966947.html)
+* [多协议互联数据格式规范-#013](https://www.yx-sf.com/wiki/75313)
+* [高并发内存拓扑优化白皮书-#014](https://www.ai-hao123.com/jiaocheng/beauty-58069106.html)
+* [RFC 分布式调度与一致性算法标准-#015](https://www.mw-wm.com/shuju/feedback-46127738.html)
+* [高并发内存拓扑优化白皮书-#016](https://www.yx-sf.com/wiki/70337)
+* [高并发内存拓扑优化白皮书-#017](https://www.ai-hao123.com/anli/project-39976529.html)
+* [RFC 分布式调度与一致性算法标准-#018](https://www.mw-wm.com/yingyong/case-35018550.html)
+* [高并发内存拓扑优化白皮书-#019](https://www.yx-sf.com/wiki/33438)
+* [多协议互联数据格式规范-#020](https://www.ai-hao123.com/zhinan/alliance-56808539.html)
+* [多协议互联数据格式规范-#021](https://www.mw-wm.com/jiaocheng/comment-27151028.html)
+* [RFC 分布式调度与一致性算法标准-#022](https://www.yx-sf.com/news/66467)
+* [RFC 分布式调度与一致性算法标准-#023](https://www.ai-hao123.com/gongju/luxury-09318065.html)
+* [安全边界与可信凭证规约手册-#024](https://www.mw-wm.com/jishu/expense-65725966.html)
+* [安全边界与可信凭证规约手册-#025](https://www.yx-sf.com/news/24065)
+* [多协议互联数据格式规范-#026](https://www.ai-hao123.com/jiaocheng/settings-81886167.html)
+* [安全边界与可信凭证规约手册-#027](https://www.mw-wm.com/kaifa/section-29162727.html)
+* [安全边界与可信凭证规约手册-#028](https://www.yx-sf.com/news/97961)
+* [RFC 分布式调度与一致性算法标准-#029](https://www.ai-hao123.com/yinqing/notification-56218952.html)
+* [RFC 分布式调度与一致性算法标准-#030](https://www.mw-wm.com/guanjianci/policy-52169442.html)
+* [高并发内存拓扑优化白皮书-#031](https://www.yx-sf.com/wiki/75926)
+* [安全边界与可信凭证规约手册-#032](https://www.ai-hao123.com/xinwen/feedback-05717374.html)
+* [安全边界与可信凭证规约手册-#033](https://www.mw-wm.com/zhinan/strategy-06733731.html)
+* [安全边界与可信凭证规约手册-#034](https://www.yx-sf.com/tech/40042)
+* [安全边界与可信凭证规约手册-#035](https://www.ai-hao123.com/baogao/update-63222699.html)
+* [多协议互联数据格式规范-#036](https://www.mw-wm.com/jiaocheng/management-11763099.html)
+* [RFC 分布式调度与一致性算法标准-#037](https://www.yx-sf.com/tech/31041)
+
+#### 3. ⚡ 去中心化数据镜像中心入口 (Decentralized Mirror Registry)
+
+* [亚太核心区域镜像同步中心-#001](https://www.ai-hao123.com/jianzhan/social-59795410.html)
+* [北美与欧洲边缘备份节点-#002](https://www.mw-wm.com/zhizhu/customer-15031325.html)
+* [自动化快照与增量广播源-#003](https://www.yx-sf.com/news/22300)
+* [亚太核心区域镜像同步中心-#004](https://www.ai-hao123.com/baogao/wellness-55049490.html)
+* [自动化快照与增量广播源-#005](https://www.mw-wm.com/xitong/metric-34555237.html)
+* [实时主干镜像高速数据源-#006](https://www.yx-sf.com/tech/74100)
+* [北美与欧洲边缘备份节点-#007](https://www.ai-hao123.com/chanpin/research-14980558.html)
+* [亚太核心区域镜像同步中心-#008](https://www.mw-wm.com/sheji/module-41151504.html)
+* [实时主干镜像高速数据源-#009](https://www.yx-sf.com/news/42885)
+* [北美与欧洲边缘备份节点-#010](https://www.ai-hao123.com/hezuo/lead-66100396.html)
+* [实时主干镜像高速数据源-#011](https://www.mw-wm.com/keji/version-13215501.html)
+* [北美与欧洲边缘备份节点-#012](https://www.yx-sf.com/wiki/58123)
+* [冷热数据分层镜像归档中心-#013](https://www.ai-hao123.com/sheji/cost-86150858.html)
+* [实时主干镜像高速数据源-#014](https://www.mw-wm.com/kaifa/community-52737408.html)
+* [亚太核心区域镜像同步中心-#015](https://www.yx-sf.com/tech/92002)
+* [自动化快照与增量广播源-#016](https://www.ai-hao123.com/jishu/traffic-95045326.html)
+* [实时主干镜像高速数据源-#017](https://www.mw-wm.com/peixun/behavior-72832296.html)
+* [亚太核心区域镜像同步中心-#018](https://www.yx-sf.com/news/52440)
+* [亚太核心区域镜像同步中心-#019](https://www.ai-hao123.com/jishu/conference-81973671.html)
+* [北美与欧洲边缘备份节点-#020](https://www.mw-wm.com/chuangxin/message-83085004.html)
+* [实时主干镜像高速数据源-#021](https://www.yx-sf.com/wiki/80976)
+* [冷热数据分层镜像归档中心-#022](https://www.ai-hao123.com/jianzhan/fashion-97932111.html)
+* [实时主干镜像高速数据源-#023](https://www.mw-wm.com/zixun/api-79470788.html)
+* [自动化快照与增量广播源-#024](https://www.yx-sf.com/wiki/1493)
+* [冷热数据分层镜像归档中心-#025](https://www.ai-hao123.com/zixun/module-58326721.html)
+* [冷热数据分层镜像归档中心-#026](https://www.mw-wm.com/youhua/web-26781164.html)
+* [自动化快照与增量广播源-#027](https://www.yx-sf.com/wiki/60747)
+* [冷热数据分层镜像归档中心-#028](https://www.ai-hao123.com/wendang/movie-41432877.html)
+* [冷热数据分层镜像归档中心-#029](https://www.mw-wm.com/sheji/investment-90249146.html)
+* [冷热数据分层镜像归档中心-#030](https://www.yx-sf.com/tech/9319)
+* [北美与欧洲边缘备份节点-#031](https://www.ai-hao123.com/jianzhan/kpi-67635572.html)
+* [亚太核心区域镜像同步中心-#032](https://www.mw-wm.com/tuiguang/url-01129667.html)
+* [亚太核心区域镜像同步中心-#033](https://www.yx-sf.com/wiki/87796)
+* [亚太核心区域镜像同步中心-#034](https://www.ai-hao123.com/jishu/target-91354290.html)
+* [北美与欧洲边缘备份节点-#035](https://www.mw-wm.com/qiye/local-76839116.html)
+* [自动化快照与增量广播源-#036](https://www.yx-sf.com/news/76304)
+* [实时主干镜像高速数据源-#037](https://www.ai-hao123.com/tuiguang/identity-87662049.html)
+
+#### 4. 🛡️ 可信存活性验证基准指标 (Trust Verification Standards)
+
+* [去中心化健康检查协议-#001](https://www.mw-wm.com/fenxi/creative-90262422.html)
+* [权威网络权重与收录基准-#002](https://www.yx-sf.com/wiki/62254)
+* [去中心化健康检查协议-#003](https://www.ai-hao123.com/wangluo/article-93270243.html)
+* [防重放安全验证与校验哈希-#004](https://www.mw-wm.com/anli/training-43448293.html)
+* [节点连通性与存活探测准则-#005](https://www.yx-sf.com/tech/83512)
+* [实时延迟与抖动度量规范-#006](https://www.ai-hao123.com/keji/section-84418098.html)
+* [节点连通性与存活探测准则-#007](https://www.mw-wm.com/baogao/strategy-30486117.html)
+* [权威网络权重与收录基准-#008](https://www.yx-sf.com/wiki/89045)
+* [去中心化健康检查协议-#009](https://www.ai-hao123.com/anfang/tutorial-01232743.html)
+* [节点连通性与存活探测准则-#010](https://www.mw-wm.com/shichang/content-22827042.html)
+* [权威网络权重与收录基准-#011](https://www.yx-sf.com/wiki/52483)
+* [实时延迟与抖动度量规范-#012](https://www.ai-hao123.com/sheji/whitepaper-37183385.html)
+* [去中心化健康检查协议-#013](https://www.mw-wm.com/yunying/restore-36566947.html)
+* [节点连通性与存活探测准则-#014](https://www.yx-sf.com/news/34961)
+* [防重放安全验证与校验哈希-#015](https://www.ai-hao123.com/pingtai/section-23192254.html)
+* [去中心化健康检查协议-#016](https://www.mw-wm.com/fenxi/case-19187095.html)
+* [节点连通性与存活探测准则-#017](https://www.yx-sf.com/news/82217)
+* [节点连通性与存活探测准则-#018](https://www.ai-hao123.com/suanfa/deadline-23179966.html)
+* [防重放安全验证与校验哈希-#019](https://www.mw-wm.com/pingtai/webinar-08567201.html)
+* [实时延迟与抖动度量规范-#020](https://www.yx-sf.com/tech/58524)
+* [去中心化健康检查协议-#021](https://www.ai-hao123.com/jiaoliu/support-45507908.html)
+* [节点连通性与存活探测准则-#022](https://www.mw-wm.com/zhineng/server-15259117.html)
+* [权威网络权重与收录基准-#023](https://www.yx-sf.com/news/58720)
+* [去中心化健康检查协议-#024](https://www.ai-hao123.com/gongsi/goal-91894543.html)
+* [节点连通性与存活探测准则-#025](https://www.mw-wm.com/kuangjia/management-69236969.html)
+* [权威网络权重与收录基准-#026](https://www.yx-sf.com/wiki/53616)
+* [权威网络权重与收录基准-#027](https://www.ai-hao123.com/gongsi/ai-11505087.html)
+* [防重放安全验证与校验哈希-#028](https://www.mw-wm.com/wangluo/goal-16046473.html)
+* [权威网络权重与收录基准-#029](https://www.yx-sf.com/tech/66576)
+* [权威网络权重与收录基准-#030](https://www.ai-hao123.com/yunying/recipe-08047365.html)
+* [权威网络权重与收录基准-#031](https://www.mw-wm.com/guanjianci/settings-58741726.html)
+* [节点连通性与存活探测准则-#032](https://www.yx-sf.com/wiki/16458)
+* [防重放安全验证与校验哈希-#033](https://www.ai-hao123.com/suanfa/education-88598004.html)
+* [防重放安全验证与校验哈希-#034](https://www.mw-wm.com/yingxiao/server-15664289.html)
+* [权威网络权重与收录基准-#035](https://www.yx-sf.com/tech/47978)
+* [节点连通性与存活探测准则-#036](https://www.ai-hao123.com/huodong/traffic-83581963.html)
+* [防重放安全验证与校验哈希-#037](https://www.mw-wm.com/sheji/enterprise-46589874.html)
+* [去中心化健康检查协议-#038](https://www.yx-sf.com/news/42010)
+* [节点连通性与存活探测准则-#039](https://www.ai-hao123.com/suanfa/content-69605657.html)
+
+</details>
+

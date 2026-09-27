@@ -1,0 +1,388 @@
+from __future__ import annotations
+
+import contextlib
+import shutil
+import tempfile
+import uuid
+from abc import ABC, abstractmethod
+from collections import OrderedDict
+from collections.abc import Mapping
+from pathlib import Path
+from threading import Lock
+from time import monotonic
+
+from reef.artifact.artifact import (
+    LOCAL_RELEASE_PREFIX,
+    Artifact,
+    ArtifactConflict,
+    ArtifactPublicationError,
+    ArtifactRef,
+    ArtifactRepository,
+)
+from reef.artifact.composite import compose_release
+
+
+class RepositoryBackend(ArtifactRepository):
+    """Durable storage bound to one scenario repository."""
+
+    @abstractmethod
+    def resolve_release(self, release_id: str | None = None) -> ArtifactRef: ...
+
+    @abstractmethod
+    def fork(
+        self,
+        release_id: str | None = None,
+        *,
+        metadata: Mapping[str, object] | None = None,
+    ) -> ArtifactRef: ...
+
+    @abstractmethod
+    def metadata(self) -> Mapping[str, object] | None: ...
+
+    @abstractmethod
+    def current(self) -> ArtifactRef: ...
+
+    @abstractmethod
+    def materialize(self, ref: ArtifactRef) -> Artifact: ...
+
+    @abstractmethod
+    def publish(
+        self,
+        artifact: Artifact,
+        *,
+        expected_parent: ArtifactRef,
+        advance_head: bool = True,
+    ) -> ArtifactRef: ...
+
+
+class StagedReleaseRepositoryBackend(RepositoryBackend):
+    """Optional storage contract for publication followed by head promotion.
+
+    ``publish(advance_head=False)`` must store resolvable release bytes and
+    metadata without moving the head. ``commit_release`` then promotes that
+    release without publishing its bytes again.
+    """
+
+    @abstractmethod
+    def commit_release(self, ref: ArtifactRef, *, expected_parent: ArtifactRef) -> None:
+        """Advance a staged durable release after the scenario commits it.
+
+        Implementations must accept an already-current release so recovery can
+        repeat an interrupted post-commit mirror update without publishing new
+        bytes. They must reject an unrelated current head.
+        """
+        ...
+
+
+class RepositoryBackendFactory(ABC):
+    @abstractmethod
+    def __call__(self, scenario: str) -> RepositoryBackend: ...
+
+
+class RegistrationAwareRepositoryBackendFactory(RepositoryBackendFactory):
+    @abstractmethod
+    def has_registration(self, scenario: str) -> bool: ...
+
+
+class EnumerableRepositoryBackendFactory(RepositoryBackendFactory):
+    @abstractmethod
+    def list_registrations(self) -> tuple[str, ...]: ...
+
+
+class CachedRepositoryBackendFactory(RegistrationAwareRepositoryBackendFactory, EnumerableRepositoryBackendFactory):
+    """Own per-scenario backend caching instead of hiding it in a closure."""
+
+    _REGISTRATION_MISS_TTL_SECONDS = 5.0
+    _REGISTRATION_MISS_CACHE_LIMIT = 1024
+
+    def __init__(self) -> None:
+        self._backends: dict[str, RepositoryBackend] = {}
+        self._registration_misses: OrderedDict[str, float] = OrderedDict()
+        self._lock = Lock()
+
+    def __call__(self, scenario: str) -> RepositoryBackend:
+        with self._lock:
+            backend = self._backends.get(scenario)
+            if backend is None:
+                backend = self._build_backend(scenario)
+                self._backends[scenario] = backend
+            self._registration_misses.pop(scenario, None)
+            return backend
+
+    def has_registration(self, scenario: str) -> bool:
+        """Check registration without constructing a new scenario backend."""
+        now = monotonic()
+        with self._lock:
+            backend = self._backends.get(scenario)
+            miss_expires_at = self._registration_misses.get(scenario)
+            if miss_expires_at is not None:
+                if miss_expires_at > now:
+                    self._registration_misses.move_to_end(scenario)
+                    return False
+                self._registration_misses.pop(scenario, None)
+
+        registered = (
+            backend.metadata() is not None if backend is not None else self._has_persisted_registration(scenario)
+        )
+        with self._lock:
+            if registered:
+                self._registration_misses.pop(scenario, None)
+            else:
+                self._registration_misses[scenario] = monotonic() + self._REGISTRATION_MISS_TTL_SECONDS
+                self._registration_misses.move_to_end(scenario)
+                while len(self._registration_misses) > self._REGISTRATION_MISS_CACHE_LIMIT:
+                    self._registration_misses.popitem(last=False)
+        return registered
+
+    def list_registrations(self) -> tuple[str, ...]:
+        """All scenario names registered with this factory's storage."""
+        with self._lock:
+            loaded = {name for name, backend in self._backends.items() if backend.metadata() is not None}
+        return tuple(sorted(loaded | set(self._list_persisted_registrations())))
+
+    def archive_registration(self, scenario: str) -> tuple[str, ...]:
+        """Forget the scenario's backend and move its durable registration aside; what was archived, by name.
+
+        After this the factory answers ``has_registration`` false and
+        ``list_registrations`` without the name, so a later create under the
+        same name starts from the base artifact. Content-addressed storage
+        the scenario shared with others stays.
+        """
+        with self._lock:
+            self._backends.pop(scenario, None)
+            self._registration_misses.pop(scenario, None)
+        return self._archive_persisted_registration(scenario)
+
+    @abstractmethod
+    def _build_backend(self, scenario: str) -> RepositoryBackend: ...
+
+    def _has_persisted_registration(self, scenario: str) -> bool:
+        return False
+
+    def _list_persisted_registrations(self) -> tuple[str, ...]:
+        return ()
+
+    def _archive_persisted_registration(self, scenario: str) -> tuple[str, ...]:
+        """Move the durable registration aside; nothing to do for a backend that registers in memory only."""
+        return ()
+
+
+class Repository(ArtifactRepository):
+    """Scenario-scoped release chain and persistence facade."""
+
+    def __init__(
+        self,
+        backend: RepositoryBackend,
+        base_artifact: ArtifactRef,
+        *,
+        current_artifact: ArtifactRef | None = None,
+        checkpoint_artifact: ArtifactRef | None = None,
+        local_dir: Path | None = None,
+    ) -> None:
+        self._backend = backend
+        self._base_artifact = base_artifact
+        self._current_artifact = current_artifact
+        self._checkpoint_artifact = checkpoint_artifact
+        # Guards every mutation of the (current, checkpoint) head pair so the
+        # two refs can only move as one atomic release record. Reads stay
+        # lock-free: a ref read is atomic under the GIL and readers must not
+        # be serialized behind a publish.
+        self._head_lock = Lock()
+        # Non-checkpointed pull-surface releases remain process-local. Keep
+        # every staged artifact addressable for snapshot and rollback reads; a
+        # single "latest local" slot would make an older snapshot dangle as
+        # soon as the next release is staged.
+        self._local_artifacts: dict[str, Artifact] = {}
+        self._process_id = uuid.uuid4().hex
+        self._temporary_directory = None
+        if local_dir is None:
+            self._temporary_directory = tempfile.TemporaryDirectory(prefix="reef-artifact-releases-")
+            self._local_root = Path(self._temporary_directory.name)
+        else:
+            self._local_root = Path(local_dir)
+        self.local_root.mkdir(parents=True, exist_ok=True)
+
+    @property
+    def local_root(self) -> Path:
+        return self._local_root
+
+    @property
+    def backend(self) -> RepositoryBackend:
+        return self._backend
+
+    @property
+    def base_artifact(self) -> ArtifactRef:
+        return self._base_artifact
+
+    @property
+    def current_artifact(self) -> ArtifactRef | None:
+        return self._current_artifact
+
+    @property
+    def checkpoint_artifact(self) -> ArtifactRef | None:
+        return self._checkpoint_artifact
+
+    def require_current_artifact(self) -> ArtifactRef:
+        if self._current_artifact is None:
+            raise ArtifactPublicationError("repository has no current artifact")
+        return self._current_artifact
+
+    def require_checkpoint_artifact(self) -> ArtifactRef:
+        if self._checkpoint_artifact is None:
+            raise ArtifactPublicationError("repository has no checkpoint artifact")
+        return self._checkpoint_artifact
+
+    def advance_current(self, ref: ArtifactRef, *, expected: ArtifactRef) -> None:
+        """Move serving state without changing the last durable checkpoint.
+
+        The move is a compare-and-swap: ``expected`` is the head the caller
+        observed when it prepared the new release. A mismatch means a
+        concurrent writer advanced the head in between, and fails loudly
+        instead of blind-overwriting it (lost update).
+        """
+        with self._head_lock:
+            if self._current_artifact != expected:
+                raise ArtifactConflict(
+                    f"serving head advanced from {expected.release_id} to "
+                    f"{None if self._current_artifact is None else self._current_artifact.release_id}; "
+                    f"refusing to advance to {ref.release_id}"
+                )
+            self._current_artifact = ref
+
+    def install_checkpoint(self, ref: ArtifactRef, *, expected: ArtifactRef, expected_checkpoint: ArtifactRef) -> None:
+        """Install already-committed serving and checkpoint refs without storage I/O."""
+        with self._head_lock:
+            if self._current_artifact != expected or self._checkpoint_artifact != expected_checkpoint:
+                raise ArtifactConflict("repository heads changed before the committed release was installed")
+            self._current_artifact = ref
+            self._checkpoint_artifact = ref
+
+    def synchronize_checkpoint(self) -> None:
+        """Repair a stale backend head from the committed checkpoint, never vice versa."""
+        checkpoint = self.require_checkpoint_artifact()
+        if self.backend.current() == checkpoint:
+            return
+        if checkpoint.parent_release_id is None:
+            raise ArtifactConflict("a committed checkpoint without a parent cannot repair a different head")
+        parent = self.backend.resolve_release(checkpoint.parent_release_id)
+        self.require_staged_commit_support().commit_release(checkpoint, expected_parent=parent)
+
+    def require_staged_commit_support(self) -> StagedReleaseRepositoryBackend:
+        if not isinstance(self.backend, StagedReleaseRepositoryBackend):
+            raise ArtifactPublicationError("repository backend must implement StagedReleaseRepositoryBackend")
+        return self.backend
+
+    def fork(self, *, metadata: Mapping[str, object] | None = None) -> ArtifactRef:
+        ref = self.backend.fork(self.base_artifact.release_id, metadata=metadata)
+        with self._head_lock:
+            self._current_artifact = ref
+            self._checkpoint_artifact = ref
+        return ref
+
+    def materialize(self, ref: ArtifactRef) -> Artifact:
+        local = self._local_artifacts.get(ref.release_id)
+        if local is not None and local.ref == ref:
+            return local
+        return self.backend.materialize(ref).with_repository(self)
+
+    def resolve(self, ref: ArtifactRef) -> Artifact:
+        """Resolve an artifact reference to a usable Artifact.
+
+        Returns a live artifact for a ``LiveWeightArtifactRef`` — the bytes are in
+        the serving engine, not on disk. Otherwise materializes the artifact
+        to a local path. Use ``Artifact.is_live`` to distinguish the two.
+        """
+        artifact = Artifact(ref, self)
+        if artifact.is_live:
+            return artifact
+        return self.materialize(ref)
+
+    def stage(
+        self,
+        step: int,
+        artifact: Artifact,
+        *,
+        parent: ArtifactRef,
+    ) -> Artifact:
+        if artifact.local_path is None:
+            raise ArtifactPublicationError("staged artifact requires local_path")
+        destination = self.local_root / self._process_id / uuid.uuid4().hex
+        try:
+            shutil.copytree(artifact.local_path, destination)
+        except OSError as exc:
+            shutil.rmtree(destination, ignore_errors=True)
+            raise ArtifactPublicationError(f"failed to stage artifact from {artifact.local_path}: {exc}") from exc
+        return self.register_staged(step, artifact, destination, parent=parent)
+
+    def stage_composed(
+        self,
+        step: int,
+        components: Mapping[str, Artifact],
+        *,
+        parent: ArtifactRef,
+    ) -> Artifact:
+        """Compose several components straight into a staged local release; one copy, not two."""
+        destination = self.local_root / self._process_id / uuid.uuid4().hex
+        composed = compose_release(components, directory=destination)
+        return self.register_staged(step, composed, destination, parent=parent)
+
+    def register_staged(self, step: int, source: Artifact, destination: Path, *, parent: ArtifactRef) -> Artifact:
+        """Record the tree staged at ``destination`` as a local release carrying ``source``'s content id and metadata."""
+        staged = Artifact(
+            ArtifactRef(
+                content_id=source.ref.content_id,
+                release_id=f"{LOCAL_RELEASE_PREFIX}{self._process_id}:{uuid.uuid4().hex}:{step}",
+                parent_release_id=parent.release_id,
+            ),
+            self,
+            local_path=destination,
+            metadata=source.metadata,
+        )
+        self._local_artifacts[staged.ref.release_id] = staged
+        return staged
+
+    def publish(
+        self,
+        artifact: Artifact,
+        *,
+        expected_parent: ArtifactRef,
+        metadata: Mapping[str, object] | None = None,
+        advance_heads: bool = True,
+    ) -> ArtifactRef:
+        """Publish ``artifact`` as the next release.
+
+        ``advance_heads`` is plural because it covers both heads this
+        repository owns, its current and checkpoint refs, along with the one
+        storage head the backend owns (``RepositoryBackend.publish``'s
+        ``advance_head``). ``False`` mints a pending release that no head
+        moves to.
+        """
+        ref = self._backend.publish(
+            (
+                artifact.with_repository(self)
+                if metadata is None
+                else Artifact(
+                    artifact.ref,
+                    self,
+                    local_path=artifact.local_path,
+                    metadata=metadata,
+                )
+            ),
+            expected_parent=expected_parent,
+            advance_head=advance_heads,
+        )
+        if advance_heads:
+            with self._head_lock:
+                self._current_artifact = ref
+                self._checkpoint_artifact = ref
+        self.discard(artifact)
+        return ref
+
+    def discard(self, artifact: Artifact) -> None:
+        if self._local_artifacts.get(artifact.ref.release_id) is artifact:
+            self._local_artifacts.pop(artifact.ref.release_id, None)
+        path = artifact.local_path
+        artifact.discard()
+        if path is not None:
+            with contextlib.suppress(OSError):
+                path.parent.rmdir()

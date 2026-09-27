@@ -1,0 +1,253 @@
+"""Candidate lifecycle shared by weight training and harness evolution."""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Literal
+
+from reef.core.evaluation import CandidateEvaluator, EvaluationResult, SelectionDecision, UpdateCandidate
+from reef.train.types import TrainingBatch, TrainStepResult
+
+
+@dataclass(frozen=True)
+class PreparedStep:
+    """One backend preparation, with or without a candidate to select.
+
+    ``state`` and ``metrics`` are final for a skipped step. For a candidate
+    step they are the common preparation values that settlement may extend.
+    """
+
+    outcome: Literal["candidate", "skip", "retry", "drop"]
+    state: Mapping[str, Any]
+    metrics: Mapping[str, Any] = field(default_factory=dict)
+    candidate: UpdateCandidate | None = None
+    storage: Mapping[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        if self.outcome not in {"candidate", "skip", "retry", "drop"}:
+            raise ValueError("prepared step outcome must be 'candidate', 'skip', 'retry', or 'drop'")
+        if self.outcome == "candidate" and self.candidate is None:
+            raise ValueError("a candidate step requires a candidate")
+        if self.outcome != "candidate" and self.candidate is not None:
+            raise ValueError(f"a {self.outcome} step cannot carry a candidate")
+        if self.outcome == "retry" and self.storage is None:
+            raise ValueError("a retry step requires its blocking storage status")
+        if self.outcome != "retry" and self.storage is not None:
+            raise ValueError(f"a {self.outcome} step cannot carry storage status")
+
+    @classmethod
+    def with_candidate(
+        cls,
+        candidate: UpdateCandidate,
+        *,
+        state: Mapping[str, Any],
+        metrics: Mapping[str, Any] | None = None,
+    ) -> PreparedStep:
+        return cls("candidate", state, metrics or {}, candidate)
+
+    @classmethod
+    def skipped(
+        cls,
+        *,
+        state: Mapping[str, Any],
+        metrics: Mapping[str, Any] | None = None,
+    ) -> PreparedStep:
+        return cls("skip", state, metrics or {})
+
+    @classmethod
+    def retrying(
+        cls,
+        *,
+        state: Mapping[str, Any],
+        storage: Mapping[str, Any],
+        metrics: Mapping[str, Any] | None = None,
+    ) -> PreparedStep:
+        return cls("retry", state, metrics or {}, storage=storage)
+
+    @classmethod
+    def dropped(
+        cls,
+        *,
+        state: Mapping[str, Any],
+        metrics: Mapping[str, Any] | None = None,
+    ) -> PreparedStep:
+        return cls("drop", state, metrics or {})
+
+
+#: What a backend's result becomes when another component's commit replaced the release it was prepared
+#: against: merged onto the release served now, evaluated again against it, or refused and prepared again.
+StaleResultPolicy = Literal["merge", "reevaluate", "refuse"]
+STALE_RESULT_POLICIES: tuple[StaleResultPolicy, ...] = ("merge", "reevaluate", "refuse")
+
+
+@dataclass(frozen=True)
+class StepExecution:
+    """One backend attempt returned to the dispatcher."""
+
+    outcome: Literal["commit", "retry", "drop"]
+    result: TrainStepResult | None = None
+    storage: Mapping[str, Any] | None = None
+    metrics: Mapping[str, Any] = field(default_factory=dict)
+    #: The prepared step a committed result came from, kept so a stale result can be evaluated again.
+    prepared: PreparedStep | None = None
+
+    def __post_init__(self) -> None:
+        if self.outcome == "commit" and self.result is None:
+            raise ValueError("a committed execution requires a training result")
+        if self.outcome != "commit" and self.result is not None:
+            raise ValueError(f"a {self.outcome} execution cannot carry a training result")
+        if self.outcome == "retry" and self.storage is None:
+            raise ValueError("a retry execution requires its blocking storage status")
+        if self.outcome != "retry" and self.storage is not None:
+            raise ValueError(f"a {self.outcome} execution cannot carry storage status")
+
+
+class CandidateBackend(CandidateEvaluator, ABC):
+    """Prepare and evaluate updates while Reef owns candidate selection.
+
+    The backend owns method-specific candidate construction and settlement,
+    and supplies the default evaluator. A recipe may inject a cohesive
+    :class:`reef.train.evaluation.CandidateEvaluationPlugin`; otherwise the trainer
+    wraps this evaluator in :class:`reef.train.evaluation.BackendAlwaysSelectPlugin`.
+    Every backend therefore follows the same evaluate-then-decide lifecycle
+    between preparation and settlement.
+    """
+
+    @abstractmethod
+    def initial_state(self) -> Mapping[str, Any]: ...
+
+    def retire_scenario(self, scenario: str) -> None:
+        """The scenario is being deleted: release what the backend holds for it beyond Reef's own state.
+
+        The default releases nothing. A backend that keeps per-scenario
+        residency in a serving engine or publication history in a training job overrides
+        this to let those go; until it does, the deletion is Reef-side only
+        and the engine keeps the scenario's adapter until it is evicted or
+        the group restarts.
+        """
+
+    def close(self) -> None:
+        """Release resources owned by this backend; safe to call repeatedly."""
+        return
+
+    @property
+    def dispatched(self) -> bool:
+        """Whether the dispatcher must run this backend outside scenario locks."""
+        return False
+
+    @property
+    def colocated(self) -> bool:
+        """Whether a dispatched job holds the served engine, so no other component can evaluate meanwhile."""
+        return False
+
+    @property
+    def harness_node_paths(self) -> Mapping[str, str] | None:
+        """Root-relative render paths of the harness node kinds; ``None`` for a backend that evolves no harness."""
+        return None
+
+    @property
+    def harness_adapter(self) -> str | None:
+        """The name of the harness adapter the backend evolves; ``None`` for a backend that evolves no harness."""
+        return None
+
+    @property
+    def stale_result_policy(self) -> StaleResultPolicy:
+        """What a result prepared against a release another trainer has since replaced becomes.
+
+        One of :data:`STALE_RESULT_POLICIES`. The default refuses it: the
+        batch is kept and prepared again. A backend whose evaluation compares
+        candidate and current under the same conditions may answer ``merge``
+        or ``reevaluate`` instead. A dispatched backend is merged whatever it
+        answers, since its result is published before it reaches the commit.
+        """
+        return "refuse"
+
+    def recover_pending_step(
+        self,
+        scenario_step: int,
+        *,
+        committed_training_job_id: str | None,
+        committed_training_without_job_id: bool,
+    ) -> None:
+        """Finish or roll back backend work left pending across a restart."""
+        return
+
+    def acknowledge_commit(self, scenario_step: int, training_job_id: str) -> None:
+        """Acknowledge that Reef durably committed a backend training job."""
+        return
+
+    def commit_applied(self, state: Mapping[str, Any]) -> None:
+        """Observe algorithm state only after its scenario commit is durable.
+
+        Backends normally need no side effect here. A backend that maintains
+        a derived local mirror may update it from ``state`` without letting
+        speculative prepare/evaluate work escape Reef's commit boundary.
+        """
+        return
+
+    def shipped_content_update(self, state: Mapping[str, Any], published_tree: Path) -> TrainStepResult | None:
+        """A result that republishes the content this Reef ships, when the served tree no longer carries it.
+
+        Content a backend ships with Reef itself (the harness backend's reef-owned
+        entries) is fixed when a scenario is created and carried unchanged by every
+        later step, so a scenario opened by an upgraded Reef compares it against
+        ``published_tree``, the served release's files. The result carries the
+        refreshed ``state`` and a durable ``artifact``; it is committed without an
+        evaluation. The default ships nothing.
+        """
+        return None
+
+    def experiment_config(self) -> Mapping[str, Any]:
+        """Non-secret backend identity/config attached to experiment runs."""
+        return {}
+
+    def operational_metrics(self) -> Mapping[str, float | int]:
+        """Nonblocking process-local measurements, independent of successful commits."""
+        return {}
+
+    def failed_step_metrics(self) -> Mapping[str, Any]:
+        """Metadata to retain when the current instruction fails before producing a result."""
+        return {}
+
+    @abstractmethod
+    def prepare_step(
+        self,
+        batch: TrainingBatch,
+        state: Mapping[str, Any],
+        scenario_step: int,
+    ) -> PreparedStep: ...
+
+    @abstractmethod
+    def evaluate(self, candidate: UpdateCandidate) -> EvaluationResult:
+        """Measure ``candidate``; the trainer's default plugin calls this with the candidate alone.
+
+        A backend may accept further keyword-only options with defaults (the
+        harness backend's ``sides``) for the plugins it ships; this contract
+        stays the one every plugin can rely on.
+        """
+
+    def prepare_reevaluation(self, prepared: PreparedStep) -> PreparedStep:
+        """The kept step, ready to be evaluated again after its result was refused as stale.
+
+        The default hands it back unchanged. A backend that keeps a record
+        per attempt claims a fresh one here, so the second evaluation lands
+        beside the first instead of failing on it.
+        """
+        return prepared
+
+    @abstractmethod
+    def settle_step(
+        self,
+        prepared: PreparedStep,
+        decision: SelectionDecision,
+    ) -> TrainStepResult: ...
+
+    @abstractmethod
+    def abort_step(self, prepared: PreparedStep) -> None:
+        """Restore backend-local state after evaluation or settlement fails."""
+
+
+__all__ = ["STALE_RESULT_POLICIES", "CandidateBackend", "PreparedStep", "StaleResultPolicy", "StepExecution"]

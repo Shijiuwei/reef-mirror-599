@@ -1,0 +1,291 @@
+"""Read scenario releases and their committed training metadata.
+
+Release queries share the committer's publication lock. They never acquire
+its operation lock, so long-running training preparation cannot block serving.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from threading import RLock
+from typing import Any
+
+from reef.artifact.artifact import (
+    Artifact,
+    ArtifactError,
+    ArtifactNotFound,
+    ArtifactRef,
+    LiveWeightArtifactRef,
+    is_local_release,
+)
+from reef.artifact.release_chain import ArtifactReleaseChain
+from reef.storage.scenario import ScenarioStore
+
+
+class ScenarioReleases:
+    """Query committed releases against one scenario's artifact chain."""
+
+    def __init__(
+        self,
+        *,
+        name: str,
+        artifacts: ArtifactReleaseChain,
+        store: ScenarioStore,
+        publication_lock: RLock,
+        scenario_step: int,
+    ) -> None:
+        self._name = name
+        self._artifacts = artifacts
+        self._store = store
+        self._publication_lock = publication_lock
+        self._creation_artifact = self._resolve_creation_artifact(scenario_step)
+        self.recorded_creation_components: Mapping[str, str] | None = None
+        self.creation_components_read = False
+        self.creation_read_failed_at: int | None = None
+
+    @property
+    def creation_artifact(self) -> ArtifactRef:
+        return self._creation_artifact
+
+    def creation_components(self, scenario_step: int, *, retry: bool = False) -> Mapping[str, str] | None:
+        """The content id of each component the creation artifact binds; ``None`` without a manifest or when it cannot be read.
+
+        The creation artifact has no commit record to carry its manifest, so
+        it is read from the release once and kept. A read that failed is
+        asked again after the next commit, or at once when ``retry`` says so:
+        on a remote backend a read is a fetch, which a page polled every few
+        seconds must not repeat while the remote is away.
+        """
+        if not self.creation_components_read:
+            if self.creation_read_failed_at == scenario_step and not retry:
+                return None
+            try:
+                manifest = self._artifacts.resolve(self._creation_artifact).components
+            except ArtifactError:
+                self.creation_read_failed_at = scenario_step
+                return None
+            self.creation_components_read = True
+            if manifest is not None:
+                self.recorded_creation_components = manifest.content_ids
+        return self.recorded_creation_components
+
+    def releases(self, scenario_step: int) -> tuple[dict[str, Any], ...]:
+        """List committed releases newest first."""
+        with self._publication_lock:
+            records = () if not self._store.durable else self._store.history()
+            rows = [
+                self._release_row(
+                    artifact_ref=self._creation_artifact,
+                    checkpoint=True,
+                    recorded_at=None,
+                    operation="creation",
+                    current=scenario_step == 0,
+                )
+            ]
+            rows.extend(
+                self._release_row(
+                    artifact_ref=record.artifact_ref,
+                    checkpoint=record.checkpoint,
+                    recorded_at=record.recorded_at,
+                    operation=record.operation,
+                    current=record.step == scenario_step,
+                    rollback_target_release_id=record.rollback_target_release_id,
+                    high_water_sequence=record.high_water_sequence,
+                    high_water_offset=record.high_water_offset,
+                    metrics=record.metrics,
+                    pending=record.pending,
+                    component=record.component,
+                    base_release_id=record.base_release_id,
+                    components=record.components,
+                )
+                for record in records
+            )
+            if not records and scenario_step > 0:
+                rows.append(
+                    self._release_row(
+                        artifact_ref=self._artifacts.current,
+                        checkpoint=True,
+                        recorded_at=None,
+                        operation="recovery",
+                        current=True,
+                    )
+                )
+            return tuple(reversed(rows))
+
+    def find_release(self, release_id: str) -> tuple[ArtifactRef, bool] | None:
+        """The release and whether it has durable bytes; a step that published nothing does not hide them.
+
+        A rejected or skipped step records the head's own reference without a
+        checkpoint, so the newest record naming a release is not the one that
+        published it: the release is restorable when any record of it is.
+        """
+        records = () if not self._store.durable else self._store.history()
+        found: tuple[ArtifactRef, bool] | None = None
+        for record in reversed(records):
+            if record.artifact_ref.release_id == release_id:
+                if record.checkpoint:
+                    return record.artifact_ref, True
+                if found is None:
+                    found = (record.artifact_ref, False)
+        if self._creation_artifact.release_id == release_id:
+            # A rejected first step records the creation without a checkpoint; the creation has its own bytes.
+            return self._creation_artifact, True
+        if found is not None:
+            return found
+        current = self._artifacts.current
+        if current.release_id == release_id:
+            # Without a durable log the served release is known by the chain alone.
+            return current, False
+        return None
+
+    def _resolve_creation_artifact(self, scenario_step: int) -> ArtifactRef:
+        """The artifact the scenario was forked from, for the release list.
+
+        A fresh scenario is still on it, so the chain head is the creation
+        artifact. After a recovery the fork point is reconstructed from the
+        first commit record: normally the durable parent of step 1's artifact
+        (a checkpoint, live, or local ref still knows its parent version); if
+        step 1 never recorded a durable parent (a plain non-checkpoint ref),
+        that ref itself is the earliest version the release list can show. When
+        the parent has since disappeared from the backend, fall back to the
+        repository base artifact.
+        """
+        if scenario_step == 0:
+            return self._artifacts.current
+        records = () if not self._store.durable else self._store.history()
+        if records and records[0].step == 1:
+            first = records[0]
+            ref = first.artifact_ref
+            if (
+                first.checkpoint or isinstance(ref, LiveWeightArtifactRef) or is_local_release(ref.release_id)
+            ) and ref.parent_release_id is not None:
+                try:
+                    return self._artifacts.repository.backend.resolve_release(ref.parent_release_id)
+                except ArtifactNotFound:
+                    pass
+            elif not first.checkpoint:
+                return ref
+        return self._artifacts.base
+
+    def metrics_for_version(self, release_id: str) -> Mapping[str, Any] | None:
+        """Metrics of the training step that published ``release_id``, if logged."""
+        if not self._store.durable:
+            return None
+        for record in self._store.history():
+            if record.artifact_ref.release_id == release_id and record.operation == "training":
+                return record.metrics
+        return None
+
+    def entries_for_version(self, release_id: str) -> tuple[Mapping[str, Any], ...] | None:
+        """The composition entries the training step that published ``release_id`` committed, if logged.
+
+        A promote or rollback release serves another release's tree: its
+        entries are the ones the training step behind that release logged, so
+        the lookup follows ``rollback_target_release_id`` until it reaches a
+        training record."""
+        if not self._store.durable:
+            return None
+        history = list(self._store.history())
+        seen: set[str] = set()
+        while release_id not in seen:
+            seen.add(release_id)
+            record = next((item for item in history if item.artifact_ref.release_id == release_id), None)
+            if record is None:
+                return None
+            if record.operation == "training":
+                entries = (record.algorithm_state or {}).get("entries")
+                if isinstance(entries, Sequence) and not isinstance(entries, str):
+                    return tuple(dict(entry) for entry in entries if isinstance(entry, Mapping))
+                return None
+            if not isinstance(record.rollback_target_release_id, str) or not record.rollback_target_release_id:
+                return None
+            release_id = record.rollback_target_release_id
+        return None
+
+    def artifact_for_version(self, release_id: str) -> Artifact:
+        """Materialize a scenario release for a read-only content serve.
+
+        The read-side counterpart of ``rollback``: the same release lookup,
+        but no head moves and no commit is written; the caller only wants the
+        version's file tree. Every failure is ``ArtifactNotFound`` naming the
+        version (not ``ReleaseNotRestorable``, which answers a rejected
+        write): to a reader, a version whose bytes are gone and a version
+        that was recorded but not kept are the same absent content.
+        """
+        if not isinstance(release_id, str) or not release_id.strip():
+            raise ValueError("release_id must be a non-empty string")
+        release_id = release_id.strip()
+        with self._publication_lock:
+            found = self.find_release(release_id)
+        if found is None:
+            raise ArtifactNotFound(f"scenario {self._name!r} has no release {release_id!r}")
+        ref, _ = found
+        if isinstance(ref, LiveWeightArtifactRef):
+            raise ArtifactNotFound(
+                f"scenario {self._name!r} release {release_id!r} is live weights and has no file tree"
+            )
+        try:
+            return self._artifacts.resolve(ref)
+        except ArtifactError as exc:
+            raise ArtifactNotFound(f"scenario {self._name!r} cannot restore release {release_id!r}: {exc}") from exc
+
+    def artifact_with_metrics(
+        self,
+        release_id: str | None = None,
+    ) -> tuple[Artifact, Mapping[str, Any] | None]:
+        """Capture one artifact and its metrics without waiting for preparation."""
+        with self._publication_lock:
+            artifact = (
+                Artifact(self._artifacts.current, self._artifacts.repository)
+                if release_id is None
+                else self.artifact_for_version(release_id)
+            )
+            metrics = self.metrics_for_version(artifact.ref.release_id)
+            return artifact, metrics
+
+    @staticmethod
+    def _release_row(
+        *,
+        artifact_ref: ArtifactRef,
+        checkpoint: bool,
+        recorded_at: float | None,
+        operation: str,
+        current: bool,
+        rollback_target_release_id: str | None = None,
+        high_water_sequence: int = 0,
+        high_water_offset: int = 0,
+        metrics: Mapping[str, Any] | None = None,
+        pending: bool = False,
+        component: str | None = None,
+        base_release_id: str | None = None,
+        components: Mapping[str, str] | None = None,
+    ) -> dict[str, Any]:
+        row: dict[str, Any] = {
+            "release_id": artifact_ref.release_id,
+            "parent_release_id": artifact_ref.parent_release_id,
+            "content_id": artifact_ref.content_id,
+            "content_kind": "live_weights" if isinstance(artifact_ref, LiveWeightArtifactRef) else "saved_artifact",
+            "checkpoint": checkpoint,
+            "restorable": checkpoint and not isinstance(artifact_ref, LiveWeightArtifactRef),
+            "recorded_at": recorded_at,
+            "operation": operation,
+            "pending": pending,
+            "current": current,
+            "record_progress": {
+                "high_water_sequence": high_water_sequence,
+                "high_water_offset": high_water_offset,
+            },
+        }
+        if rollback_target_release_id is not None:
+            row["rollback_target_release_id"] = rollback_target_release_id
+        if isinstance(artifact_ref, LiveWeightArtifactRef):
+            row["runtime_load_id"] = artifact_ref.runtime_load_id
+        if metrics is not None:
+            row["metrics"] = dict(metrics)
+        if component is not None:
+            row["component"] = component
+        if base_release_id is not None:
+            row["base_release_id"] = base_release_id
+        if components is not None:
+            row["components"] = dict(components)
+        return row

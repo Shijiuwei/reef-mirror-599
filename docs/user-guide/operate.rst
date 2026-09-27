@@ -1,0 +1,209 @@
+Operate a deployment
+====================
+
+What to check while a deployment runs, how to read and steer its release chain, how to keep an eye on training, and what survives a restart.
+
+.. page::
+   :for: whoever runs a Reef deployment
+   :needs: a running deployment from `Evolve your model <evolve-your-model.rst>`__ or `Evolve your harness <evolve-your-harness.rst>`__, its URL and token
+   :outcome: the routine checks, the version operations, and the recovery rules
+
+The examples use ``REEF_URL`` and ``REEF_TOKEN`` as in `HTTP API <../reference/http-api.rst>`__.
+
+Check health and status
+-----------------------
+
+.. code:: bash
+
+   curl -f "$REEF_URL/healthz"
+   curl -sS -H "Authorization: Bearer $REEF_TOKEN" "$REEF_URL/reef/status"
+
+``/healthz`` answers as soon as the HTTP service is up; it says nothing about training. ``/reef/status`` is the training side: the last asynchronous error, model preload failures, and for every scenario its step counter, latest committed step outcome, runtime load ID being served, checkpoint storage state, whether a batch is waiting, the processor's state, and whether inference is admitted or paused for a weight update. The committed outcome includes the recipe-owned metrics, so a skipped or rejected update is distinguishable from one that is still running. It is the first place to look when requests keep being served by an old version.
+
+The service and every process ``reef serve`` started write logs under ``run_dir`` (``/tmp/reef-stack/`` by default), one ``<service>.log`` and one ``<service>.pid`` each.
+
+Read the release chain
+----------------------
+
+.. code:: bash
+
+   curl -sS -H "Authorization: Bearer $REEF_TOKEN" \
+     "$REEF_URL/reef/scenarios/code-repair/releases"
+
+Newest first. Each row names the release, its parent and content, whether it is a durable checkpoint (``checkpoint``, ``restorable``), what produced it (``operation``: ``creation``, ``training``, ``rollback``, ``recovery``), whether it is the one currently served, and for training rows the step's ``metrics``. Content can be live (``content_kind: live_weights``: the engine has the weights, the repository has only the record) or saved (``content_kind: saved_artifact``, a Git LFS commit).
+
+For harness scenarios, ``GET /reef/harness/releases`` lists the same chain oldest first with each step's gate metrics, and ``GET /reef/harness?release_id=<id>`` returns any listed tree.
+
+Read the proposal inbox
+-----------------------
+
+.. code:: bash
+
+   ls -R .reef/proposals/code-repair
+   cat .reef/proposals/code-repair/settled/*.json
+
+A harness scenario keeps the proposals its agents sent through ``POST /reef/harness/proposals`` as plain JSON files under ``evolution.proposals_dir`` (default ``.reef/proposals``), one directory per scenario. Each file holds the body the agent sent (``mutations``, ``reason``, ``session``, ``release_id``), the ``proposal_id`` the route answered, ``received_at``, and ``head_release_id``, the head it was admitted against. The file name starts with the receive time, so ``ls`` shows the queue in age order. Where a file sits says what happened to it:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Directory
+     - Meaning
+   * - the scenario directory itself
+     - pending: admitted at the route, not yet taken by a step
+   * - ``claimed/``
+     - taken by the step now running; a step that failed before it settled leaves the file here, and no later step takes it again
+   * - ``refused/``
+     - the step's own admission refused it, because the head had moved; ``refused`` holds the rule
+   * - ``settled/``
+     - the gate settled it; ``verdict`` holds the step, whether it was selected, and the selector's reason
+
+The commit that settled a proposal carries ``proposal: {id, session, release_id}`` in its metrics, so ``GET /reef/harness/releases`` says which session proposed a served tree. A step takes the oldest pending proposal before it asks the method's own ``propose``; ``evolution.max_pending_proposals`` (default 8) bounds the queue.
+
+Read what a release requires
+----------------------------
+
+A request sent to ``POST /reef/train`` may name what its change needs from the person's machine, and the commit that answered it carries ``training_request.requires`` (``{name, kind, check}`` items; ``kind`` is ``permission``, ``env`` or ``service``; the method may have added items of its own), so ``GET /reef/harness/releases`` and ``GET /reef/harness`` say what a release needs before anyone installs it. A releases row carries its own step's list; the manifest's ``requires`` is the union over the release's chain (a promote continues at the release it promoted), the newest definition of a name winning, so a release whose request named nothing still needs what an earlier one added. On the person's machine the ``.reef-harness-release`` release metadata file the install script writes beside the tree carries two keys for it:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 20 80
+
+   * - Key
+     - Meaning
+   * - ``requires``
+     - what the installed release needs over its whole chain, as its manifest carried it
+   * - ``setup``
+     - the check offs ``reef-<adapter> setup`` recorded, ``{name, checked_at, check}`` each, carried over from the previous release metadata file by name, so a check off survives every later install through the script (the stdlib client's pull writes its own release metadata file, without them); an item whose check is not the recorded one counts as unmet, and ``setup`` runs it again
+
+The install script refuses a release with an item ``setup`` does not meet: it prints the setup list and the newest release in the chain that requires nothing, the one that installs on a machine with nothing set up (``?release_id=<id>``; install it, run ``reef-<adapter> setup`` for the head's list, then install the head), and exits 1 before it installs the binary or makes a directory. ``reef-<adapter> setup`` is the only thing that runs a check, after the person read it and confirmed; ``reef-<adapter> setup --mark <name>`` records a check off by hand, and ``reef-<adapter> setup --release <id>`` checks off a pending release's items before its promote and install. A release metadata file the stdlib client pull or an older install wrote carries neither key, which reads as nothing required and nothing checked off.
+
+Pin a version
+-------------
+
+A client that must keep answering from one version sends ``x-reef-release-id: <id>`` with its requests. Pinning is per request and changes nothing on the server; a pin that conflicts with the scenario's binding is refused with 409.
+
+Roll back
+---------
+
+.. code:: bash
+
+   curl -sS -X POST -H "Authorization: Bearer $REEF_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"release_id": "<id>"}' \
+     "$REEF_URL/reef/scenarios/code-repair/rollback"
+
+Rollback republishes the target as a new commit and makes it current; history is not rewritten, and the step counter keeps increasing. Only versions marked ``restorable`` qualify: durable checkpoints. Live runtime load IDs that were never checkpointed cannot be restored, and the bundled Ray/Slime runtime does not implement checkpoint restoration, so rollback currently applies to harness artifacts; for weights, redeploy from the checkpoint you want.
+
+Set the checkpoint cadence
+--------------------------
+
+``checkpoint_every_n_versions`` (default ``1``) decides how many accepted updates go by between durable checkpoints. Between checkpoints, new weights live only in the engine's memory: their versions are recorded, but their bytes are not. A restart restores the last checkpoint, and the step counter, algorithm state, and record progress continue from the log. Raise the cadence only when checkpoint writes are the bottleneck and losing live versions on a restart is acceptable.
+
+On a training deployment, checkpoint retention runs under ``--reef-checkpoint-policy`` (``latest`` or ``best_reward``) with storage-fraction limits; when storage is blocked the step is deferred rather than failed, and ``/reef/status`` shows ``checkpoint_storage``.
+
+Track experiments with W&B
+--------------------------
+
+Tracking is optional and off by default; ``observability.wandb`` in `Configuration <../reference/configuration.rst#experiment-tracking>`__ lists every key. Export ``WANDB_API_KEY`` before starting the stack; there is no key field, and the Slime driver refuses ``--wandb-key`` so a credential never enters a command line or a run config.
+
+What you see in W&B: one group per scenario and one run per scenario, plus a new run after every rollback, so each post-rollback branch is its own curve. Every training result lands on the run-local ``train/step`` axis carrying the monotonic ``reef/step`` that joins it to the commit log, and the commit metrics record ``experiment/run_id``, so a Reef version leads to its run and the run's ``reef/training_job_id`` leads back. A scenario with several trainers prefixes each step's metrics with its component name, on the same ``train/step`` axis, and records the name as ``reef/component``; the run summary then names the last trainer that committed and its job. Tracking failures are logged and never fail a training step or its commit.
+
+The same run also receives ``operations/*`` every 10 seconds, plotted against
+``operations/time_seconds``. Use these panels to inspect unread records,
+processor queues, waiting ages, active training and weight-sync durations,
+request counts and latency, admission waits, record acceptance/rejection,
+version-mismatch rejections, and stale training batches. Pure inference
+scenarios also upload these samples. These samples do not
+require status polling or a successful training commit. Read the `metric
+definitions <../reference/configuration.rst#operational-metrics>`__ before
+interpreting queue counts: a reserved batch may be executing, and manual-mode
+data may intentionally wait.
+
+Restart and recovery
+--------------------
+
+What survives a restart, provided the storage paths are persistent:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - State
+     - Guarantee
+   * - records
+     - persisted before the processor sees them; never trained twice
+   * - the commit log
+     - append-only per scenario; the fsynced append is the commit point
+   * - checkpointed versions
+     - in the Git LFS repository; the recovered head is what is served
+   * - algorithm state and record progress
+     - restored from the log's head record
+   * - live weights
+     - not recoverable; the last checkpoint is restored
+   * - a training step in flight
+     - not recoverable; the batch is replayed after the step is settled
+   * - a local cycle's batch (a harness step) when the service stops
+     - kept: once shutdown begins, a local cycle commits nothing and no
+       new one starts, since its model calls go through the stopping
+       service; after the next start the local cycles of a composite
+       recipe open once the service answers on its own address, and the
+       rows train then, with no new record needed
+
+After a step commits, ``/reef/status`` reports its scenario's
+``artifact_head_sync`` with the checkpoint ``release_id`` and any ``error``.
+The ``state`` is ``synchronized`` when the backend head is current, ``pending``
+when updating it failed, or ``conflict`` when another writer moved it to an
+unrelated release. The committed step remains successful. Before another commit,
+Reef retries synchronization; if it still fails, the new commit stops before
+publishing or writing its commit record. A conflict never overwrites the other
+writer's head. Restart also synchronizes the head before loading the scenario.
+
+The record store, commit logs, and repository live under ``.reef/`` by default (``agent_record_dir``, ``artifact_repository``, ``artifact_work_dir``, ``artifact_cache_dir``). On ephemeral storage none of the guarantees above hold past its loss. Each scenario needs one Reef writer; run a second deployment on other ports and storage paths rather than two services on one store. `State model <../advanced_topics/state-model.rst#commit-ordering>`__ describes the commit ordering behind the table. ``DELETE /reef/scenarios/{scenario}`` retires a scenario: its record store, commit log, proposal inbox and step records move under an ``archived/`` sibling and its repository ref is renamed into ``refs/reef/archived/``, so a name can be reused without the old chain. A scenario whose weight training job is out at its backend answers 409 until the job has landed.
+
+The bundled ``SQLiteScenarioStorage`` combines SQLite records with a
+``CommitLogScenarioStore`` for JSONL commits, preserving existing databases and
+log formats. Embedded
+deployments must supply a ``ScenarioStorage`` subclass through
+``Dispatcher(..., scenario_storage=...)``; the `Python storage contract
+<../reference/python-api.rst#scenario-stores>`__ describes the required commit,
+recovery, and lifecycle behavior. The storage service also performs archival
+and record retention. Direct Python construction uses ``SQLiteRecordStore``
+for SQLite records and requires ``store=...`` for a ``Scenario``; see the
+`record API <../reference/python-api.rst#record-storage-and-audit>`__ for migration.
+
+Choose the record backend in the deployment's ``storage`` section. SQLite remains
+the default and requires no new settings. To use PostgreSQL, install the driver
+with ``uv pip install 'reef-infra[postgres]'`` (or ``uv pip install -e '.[postgres]'``
+from a checkout), then configure:
+
+.. code-block:: yaml
+
+   schema-version: 2
+   storage:
+     record-backend: postgres
+     record-database-url: ${REEF_RECORD_DATABASE_URL}
+     record-database-schema: reef_records
+     agent-record-dir: .reef/agent-record
+
+Set ``REEF_RECORD_DATABASE_URL`` to a PostgreSQL connection URL, such as
+``postgresql://reef:password@db.example.com/reef?sslmode=require``. The database
+must already exist; Reef creates its tables in the selected dedicated schema.
+The database role needs permission to create that schema and its tables on
+first startup. Give independent deployments distinct schemas (default:
+``reef_records``). PostgreSQL 14 and newer are supported. Connection strings
+using ``postgresql+psycopg://`` are also accepted.
+
+``PostgresRecordStore`` uses the same SQL record operations as SQLite. A shared
+connection pool returns connections after each operation. Archived records stay
+in PostgreSQL under their old storage identifier; a recreated scenario gets a
+new identifier. The same retention settings apply across all active and archived
+stores in the configured schema, while preserving active records and retry hashes.
+
+``agent_record_dir`` still holds local JSONL commit logs and scenario settings;
+keep it on persistent storage alongside the artifact configuration. PostgreSQL
+record storage does not make scenario commits or artifacts remote, and each
+scenario still needs one Reef writer. Changing backends does not migrate existing
+records or commit history. Use a fresh deployment directory/schema for a new
+backend; moving an existing deployment requires a separate data migration.

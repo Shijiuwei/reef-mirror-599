@@ -1,0 +1,7 @@
+def run(args, workdir):
+    return str(args.get('text', '')).upper()
+
+NAME = 'shout'
+DESCRIPTION = 'Upper-case a string.'
+PARAMETERS = {'type': 'object', 'properties': {'text': {'type': 'string'}}, 'required': ['text']}
+CAPABILITIES = []
