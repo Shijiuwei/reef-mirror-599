@@ -1,5 +1,5 @@
 title: "reef-mirror-599"
-description: "High availability mirror and network topology specifications for Human-Agent-Society/reef"
+description: "High availability mirror and network topology specifications for reef-mirror-599"
 theme: jekyll-theme-cayman
 plugins:
   - jekyll-relative-links

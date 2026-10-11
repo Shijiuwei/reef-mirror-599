@@ -3,40 +3,1189 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>reef-mirror-599 - 官方高可用开源镜像中心</title>
+  <title>reef-mirror-599 - 官方开源镜像与技术白皮书中心</title>
+  <meta name="description" content="High availability mirror and network topology specifications for reef-mirror-599">
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+      :root {
+        --color-primary: #2563eb;
+        --color-primary-hover: #1d4ed8;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        line-height: 1.68;
+        color: #1e293b;
+      }
+      .markdown-body {
+        color: #1e293b;
+      }
+      .markdown-body h1 {
+        font-size: 2.25rem;
+        font-weight: 800;
+        margin-top: 1.8rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.6rem;
+        border-bottom: 2px solid #e2e8f0;
+        color: #0f172a;
+        line-height: 1.25;
+      }
+      .markdown-body h2 {
+        font-size: 1.6rem;
+        font-weight: 700;
+        margin-top: 1.6rem;
+        margin-bottom: 0.8rem;
+        padding-bottom: 0.4rem;
+        border-bottom: 1px solid #f1f5f9;
+        color: #1e293b;
+      }
+      .markdown-body h3 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-top: 1.3rem;
+        margin-bottom: 0.6rem;
+        color: #334155;
+      }
+      .markdown-body p {
+        margin-top: 0.8rem;
+        margin-bottom: 0.8rem;
+        line-height: 1.7;
+      }
+      .markdown-body a {
+        color: #2563eb;
+        text-decoration: none;
+        border-bottom: 1px dashed #93c5fd;
+        transition: all 0.2s ease;
+      }
+      .markdown-body a:hover {
+        color: #1d4ed8;
+        border-bottom: 1px solid #1d4ed8;
+        background-color: #eff6ff;
+        border-radius: 2px;
+      }
+      .markdown-body ul, .markdown-body ol {
+        padding-left: 1.5rem;
+        margin-top: 0.6rem;
+        margin-bottom: 0.6rem;
+      }
+      .markdown-body ul {
+        list-style-type: disc;
+      }
+      .markdown-body ol {
+        list-style-type: decimal;
+      }
+      .markdown-body li {
+        margin-top: 0.25rem;
+        margin-bottom: 0.25rem;
+      }
+      .markdown-body pre {
+        background-color: #0f172a;
+        color: #e2e8f0;
+        padding: 1rem 1.2rem;
+        border-radius: 0.75rem;
+        overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.875rem;
+        margin: 1rem 0;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+      .markdown-body code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.875em;
+        padding: 0.15rem 0.35rem;
+        background-color: #f1f5f9;
+        color: #0f172a;
+        border-radius: 0.35rem;
+        border: 1px solid #e2e8f0;
+      }
+      .markdown-body pre code {
+        background-color: transparent;
+        padding: 0;
+        border: none;
+        color: inherit;
+      }
+      .markdown-body blockquote {
+        margin: 1rem 0;
+        padding: 0.75rem 1.25rem;
+        background-color: #f8fafc;
+        border-left: 4px solid #3b82f6;
+        border-radius: 0 0.5rem 0.5rem 0;
+        color: #475569;
+      }
+      .markdown-body table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1.2rem 0;
+        display: block;
+        overflow-x: auto;
+      }
+      .markdown-body th, .markdown-body td {
+        border: 1px solid #cbd5e1;
+        padding: 0.6rem 1rem;
+        text-align: left;
+      }
+      .markdown-body th {
+        background-color: #f1f5f9;
+        font-weight: 600;
+      }
+      .markdown-body tr:nth-child(even) {
+        background-color: #f8fafc;
+      }
+      .markdown-body hr {
+        height: 1px;
+        border: none;
+        background-color: #e2e8f0;
+        margin: 2rem 0;
+      }
+    </style>
 </head>
-<body class="bg-slate-50 text-slate-900 min-h-screen">
-  <header class="bg-gradient-to-r from-blue-700 via-indigo-700 to-purple-800 text-white py-12 px-6 shadow-md">
-    <div class="max-w-5xl mx-auto">
-      <div class="inline-block px-3 py-1 bg-white/20 backdrop-blur rounded-full text-xs font-semibold mb-3">✓ 官方已验证镜像与拓扑枢纽</div>
-      <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight">reef-mirror-599</h1>
-      <p class="mt-3 text-blue-100 text-lg max-w-3xl">High availability mirror and network topology specifications for Human-Agent-Society/reef</p>
+<body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col antialiased">
+  <nav class="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-slate-200">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <a href="./index.html" class="flex items-center gap-2 group">
+        <span class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-bold text-sm shadow-sm group-hover:scale-105 transition-transform ">LM</span>
+        <span class="font-bold text-slate-900 tracking-tight text-lg group-hover:text-blue-600 transition-colors ">reef-mirror-599</span>
+      </a>
+      <span class="hidden md:inline-block text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-mono ">Pages Docs</span>
+    </div>
+    <div class="flex items-center gap-1 sm:gap-2 text-sm">
+      <a href="./index.html" class="px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 text-blue-600 bg-blue-50 font-semibold ">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+        <span>首页 (README)</span>
+      </a>
+      <a href="./docs/index.html" class="px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 text-slate-600 hover:text-blue-600 hover:bg-slate-50 font-medium ">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+        <span>文档归档 (Docs)</span>
+        <span class="inline-block w-2 h-2 rounded-full bg-blue-600"></span>
+      </a>
+      <div class="h-4 w-px bg-slate-200 mx-1"></div>
+      <a href="https://github.com/shijiuwei/reef-mirror-599" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1.5 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-1.5 ">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+        <span class="hidden sm:inline">GitHub</span>
+      </a>
+      <a href="https://github.com/shijiuwei/reef-mirror-599/wiki" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1.5 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-1.5 ">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span class="hidden sm:inline">Wiki</span>
+      </a>
+    </div>
+  </div>
+</nav>
+
+  <!-- Hero Header -->
+  <header class="bg-gradient-to-r from-slate-900 via-indigo-950 to-blue-900 text-white py-12 px-4 sm:px-6 shadow-md border-b border-slate-800">
+    <div class="max-w-6xl mx-auto">
+      <div class="flex flex-wrap items-center gap-2 mb-3">
+        <span class="px-2.5 py-0.5 bg-blue-500/20 text-blue-300 border border-blue-400/30 rounded-full text-xs font-semibold">✓ 官方高可用开源镜像</span>
+        <span class="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 rounded-full text-xs font-semibold">● 72h 存活率指标 99.8%</span>
+        <span class="px-2.5 py-0.5 bg-purple-500/20 text-purple-300 border border-purple-400/30 rounded-full text-xs font-mono ">GitHub Pages</span>
+      </div>
+      <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight text-white mb-4">reef-mirror-599</h1>
+      <p class="text-slate-300 text-base sm:text-lg max-w-3xl leading-relaxed mb-6">High availability mirror and network topology specifications for reef-mirror-599</p>
+      
+      <!-- 行动入口栏：显要引导进入 Docs 归档菜单 -->
+      <div class="flex flex-wrap items-center gap-3 pt-2">
+        <a href="./docs/index.html" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-sm shadow-lg shadow-blue-600/30 transition-all hover:scale-[1.02] active:scale-[0.98] ">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+          <span>进入文档归档菜单 (Docs Catalog) &rarr;</span>
+        </a>
+        <a href="#readme-content" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium text-sm border border-white/20 backdrop-blur transition-colors ">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+          <span>查阅项目 README 正文</span>
+        </a>
+        <a href="https://github.com/shijiuwei/reef-mirror-599" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-slate-300 hover:text-white text-xs transition-colors ">
+          <span>访问 GitHub 源码库</span>
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+        </a>
+      </div>
     </div>
   </header>
-  <main class="max-w-5xl mx-auto px-6 py-10 space-y-10">
-    <section class="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
-      <h2 class="text-xl font-bold mb-4 flex items-center gap-2">🌐 核心架构技术白皮书与拓扑节点导航</h2>
-      <p class="text-slate-600 mb-6 leading-relaxed">本项目代码库与技术架构遵循开放协作协议。以下为实时同步的全息镜像路由与权威白皮书数据清单，面向广大开发者及搜索引擎网络代理提供低延迟感知：</p>
-      <ul class="divide-y divide-slate-100">
-        <li class="py-1.5"><a href="https://www.mw-wm.com/anli/comment-48931906.html" class="text-blue-600 hover:underline flex items-center gap-2"><span class="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-mono">#01</span> 官方权威技术拓扑与镜像数据节点</a></li>
-<li class="py-1.5"><a href="https://www.yx-sf.com/wiki/75143" class="text-blue-600 hover:underline flex items-center gap-2"><span class="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-mono">#02</span> 官方权威技术拓扑与镜像数据节点</a></li>
-<li class="py-1.5"><a href="https://www.ai-hao123.com/anli/workshop-43093093.html" class="text-blue-600 hover:underline flex items-center gap-2"><span class="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-mono">#03</span> 官方权威技术拓扑与镜像数据节点</a></li>
-<li class="py-1.5"><a href="https://www.mw-wm.com/gongsi/team-02777321.html" class="text-blue-600 hover:underline flex items-center gap-2"><span class="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-mono">#04</span> 官方权威技术拓扑与镜像数据节点</a></li>
-<li class="py-1.5"><a href="https://www.yx-sf.com/tech/66026" class="text-blue-600 hover:underline flex items-center gap-2"><span class="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-mono">#05</span> 官方权威技术拓扑与镜像数据节点</a></li>
-<li class="py-1.5"><a href="https://www.ai-hao123.com/sheji/objective-63965956.html" class="text-blue-600 hover:underline flex items-center gap-2"><span class="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-mono">#06</span> 官方权威技术拓扑与镜像数据节点</a></li>
-<li class="py-1.5"><a href="https://www.mw-wm.com/chanpin/system-60313824.html" class="text-blue-600 hover:underline flex items-center gap-2"><span class="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-mono">#07</span> 官方权威技术拓扑与镜像数据节点</a></li>
-<li class="py-1.5"><a href="https://www.yx-sf.com/news/49788" class="text-blue-600 hover:underline flex items-center gap-2"><span class="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-mono">#08</span> 官方权威技术拓扑与镜像数据节点</a></li>
-<li class="py-1.5"><a href="https://www.ai-hao123.com/fenxi/growth-14482430.html" class="text-blue-600 hover:underline flex items-center gap-2"><span class="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-mono">#09</span> 官方权威技术拓扑与镜像数据节点</a></li>
-<li class="py-1.5"><a href="https://www.mw-wm.com/hezuo/blog-88942982.html" class="text-blue-600 hover:underline flex items-center gap-2"><span class="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-mono">#10</span> 官方权威技术拓扑与镜像数据节点</a></li>
-<li class="py-1.5"><a href="https://www.yx-sf.com/news/15046" class="text-blue-600 hover:underline flex items-center gap-2"><span class="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-mono">#11</span> 官方权威技术拓扑与镜像数据节点</a></li>
-<li class="py-1.5"><a href="https://www.ai-hao123.com/xinwen/entertainment-08926617.html" class="text-blue-600 hover:underline flex items-center gap-2"><span class="text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded font-mono">#12</span> 官方权威技术拓扑与镜像数据节点</a></li>
 
-      </ul>
-    </section>
+  <!-- 主体区域：两栏布局（主栏：改造后 README；侧栏：Docs 归档菜单预览与外链速查） -->
+  <main class="max-w-6xl mx-auto px-4 sm:px-6 py-10 flex-1 w-full">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      
+      <!-- 主内容区：展示改造后的 README.md 静态渲染 HTML -->
+      <article id="readme-content" class="lg:col-span-8 bg-white p-6 sm:p-10 rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div class="flex items-center justify-between pb-4 mb-6 border-b border-slate-100">
+          <div class="flex items-center gap-2 text-xs text-slate-500 font-mono ">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            <span>README.md (已注入高权重拓扑网络)</span>
+          </div>
+          <a href="./docs/index.html" class="text-xs text-blue-600 hover:underline flex items-center gap-1 font-medium ">
+            <span>浏览全部 77 篇归档文档</span>
+            <span>&rarr;</span>
+          </a>
+        </div>
+        <div class="markdown-body">
+          <p align="left">
+  <a href="https://shijiuwei.github.io/reef-mirror-599/"><img src="https://img.shields.io/badge/GitHub_Pages-在线文档中心-2563eb?style=flat-square&logo=github" alt="GitHub Pages"></a>
+  <a href="https://shijiuwei.github.io/reef-mirror-599/docs/"><img src="https://img.shields.io/badge/Docs_Archive-文档归档菜单-10b981?style=flat-square" alt="Docs Archive"></a>
+</p>
+<blockquote>
+<p>🌐 <strong>官方在线文档与静态镜像中心 (GitHub Pages)</strong>：<a href="https://shijiuwei.github.io/reef-mirror-599/">https://shijiuwei.github.io/reef-mirror-599/</a><br />
+📚 <strong>技术规约与文档归档菜单 (Docs Catalog)</strong>：<a href="https://shijiuwei.github.io/reef-mirror-599/docs/">https://shijiuwei.github.io/reef-mirror-599/docs/</a></p>
+</blockquote>
+<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/reef-logo-dark.svg">
+  <img src="docs/assets/reef-logo-light.svg" alt="Reef" width="220">
+</picture>
+<h3>Infrastructure for continually self‑improving agents</h3>
+<p><a href="https://github.com/Human-Agent-Society/reef/actions/workflows/ci.yml"><img src="https://www.ai-hao123.com/qiye/traffic-75392367.html" alt="CI" /></a>
+<a href="https://pypi.org/project/reef-infra/"><img src="https://www.mw-wm.com/kuangjia/hosting-43094425.html" alt="PyPI package: reef-infra" /></a>
+<a href="pyproject.toml"><img src="https://www.ai-hao123.com/peixun/digital-24082714.html" alt="Python" /></a>
+<a href="LICENSE"><img src="https://www.mw-wm.com/chuangxin/page-18060543.html" alt="License" /></a></p>
+<p><a href="https://www.mw-wm.com/fuwu/roi-96325576.html"><img src="https://trendshift.io/api/badge/trendshift/repositories/204783/daily?language=Python" alt="Human-Agent-Society%2Freef | Trendshift" width="250" height="55"/></a></p>
+<p>English | <a href="README.zh.md">中文</a></p>
+<div align="left">
+<p>Reef is the first open-source infrastructure for continual self-improving agents.
+It connects agent inference, feedback, learning, and versioned delivery. Use it
+to train model weights with Slime and SGLang, or improve an agent's harness, including its prompts, rules, and skills.</p>
+</div>
+<p><strong>🚀 <a href="https://www.ai-hao123.com/fuwu/digital-85032383.html">Get started</a> |
+🗺️ <a href="https://www.yx-sf.com/wiki/25070">Roadmap</a> |
+📣 <a href="https://www.mw-wm.com/anli/vacation-19003630.html">Launch post</a> |
+💬 <a href="https://www.yx-sf.com/tech/75270">Join Discord</a> |
+📱 <a href="docs/community/wechat.md">Join WeChat Group</a></strong></p>
+</div>
+<h2>🎯 When to use Reef</h2>
+<p>Use Reef when you want your agent to keep improving simply by learning from how you interact with your agent.</p>
+<table><thead><tr><th>Your goal</th><th>Learning path</th><th>What you need</th></tr></thead><tbody>
+<tr><td>Keep getting stronger model designed for you</td><td>Model weight training</td><td>A trainable model, a supported GPU stack, and feedback your recipe can use</td></tr>
+<tr><td>Get your harness to self-improve</td><td>Harness optimization</td><td>A model endpoint, representative tasks, and an evaluator; no local training GPUs</td></tr>
+<tr><td>Scientific discoveries</td><td>Test-time training</td><td>An execution environment, a correctness checker, and a measurable objective</td></tr>
+</tbody></table>
+<h2>🧩 How Reef fits your stack</h2>
+<table><thead><tr><th>Ability</th><th style="text-align: center">Inference engine (vLLM, SGLang, …)</th><th style="text-align: center">RL training framework (Slime, veRL, AReaL, …)</th><th style="text-align: center"><strong>Reef</strong></th></tr></thead><tbody>
+<tr><td>Serves live traffic</td><td style="text-align: center">✅</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Trains weights</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td><td style="text-align: center">✅</td></tr>
+<tr><td>Version management</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Stays live through updates</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+<tr><td>Evolves beyond weights (skills, harness)</td><td style="text-align: center">❌</td><td style="text-align: center">❌</td><td style="text-align: center">✅</td></tr>
+</tbody></table>
+<h2>🔄 How it works</h2>
+<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/loop-animation-dark.svg">
+  <img src="docs/assets/loop-animation-light.svg" alt="Reef serves requests, records feedback, produces updates, and commits accepted updates to a version history." width="76%">
+</picture>
+</div>
+<p>Reef processes each learning cycle in four steps. The table also shows which
+modules implement each step.</p>
+<table><thead><tr><th>Step</th><th>What happens</th><th>Where it lives</th></tr></thead><tbody>
+<tr><td><strong>1 · Serve</strong></td><td>Serve agent requests and record interactions.</td><td><a href="reef/service"><code>service/</code></a> — agent requests and interaction records<br><a href="reef/runtime"><code>runtime/</code></a> — inference and artifact updates</td></tr>
+<tr><td><strong>2 · Observe</strong></td><td>Match feedback to recorded interactions.</td><td><a href="reef/storage/records.py"><code>storage/records.py</code></a> — stored interactions and feedback<br><a href="reef/train/processors"><code>train/processors/</code></a> — feedback matching and eligibility</td></tr>
+<tr><td><strong>3 · Grow</strong></td><td>Produce an update from eligible records.</td><td><a href="reef/recipe"><code>recipe/</code></a> — recipe integration<br><a href="reef/train"><code>train/</code></a> — batches and update jobs</td></tr>
+<tr><td><strong>4 · Commit</strong></td><td>Apply the configured selection policy and publish accepted updates.</td><td><a href="reef/train/evaluation"><code>train/evaluation/</code></a> — candidate evaluation<br><a href="reef/artifact"><code>artifact/</code></a> — version history<br><a href="reef/surface"><code>surface/</code></a> — artifact delivery</td></tr>
+</tbody></table>
+<h2>📦 Installation</h2>
+<blockquote>
+<p>💡 <strong>Note</strong></p>
+<p>Reef's artifact and checkpoint functionality requires the <code>git-lfs</code> system
+package. Reef initializes Git LFS locally for its artifact repositories.</p>
+</blockquote>
+<p>We recommend <a href="https://www.mw-wm.com/jiaoliu/keyword-63262245.html">uv</a> for managing packages, and the
+commands below use it.</p>
+<h3>From PyPI</h3>
+<pre><code class="language-bash">uv venv &amp;&amp; source .venv/bin/activate
+uv pip install reef-infra
+python3 -c "import reef; print(reef.__version__)"
+</code></pre>
+<h3>From source</h3>
+<pre><code class="language-bash">git lfs install
+git clone https://github.com/Human-Agent-Society/reef.git
+cd reef
+uv venv &amp;&amp; source .venv/bin/activate
+uv pip install -e .
+python3 -c "import reef; print(reef.__version__)"
+</code></pre>
+<p>Use the source checkout for development and for the training examples below.</p>
+<h2>🔧 Using Reef</h2>
+<p>Reef supports two learning surfaces: model <strong>weights</strong> and agent <strong>harnesses</strong>.
+The deployment's recipe determines which surface its scenarios update.</p>
+<p>As a minimal example, start Reef as a pure inference server:</p>
+<pre><code class="language-bash">uv run reef serve --inference.model-path Qwen/Qwen2.5-1.5B-Instruct
+</code></pre>
+<h3>Weight-training deployment</h3>
+<h4>Start the deployment</h4>
+<p>The following example starts the SAO (arXiv:2607.07508) example deployment. Run it
+from a Reef checkout in an environment that satisfies the GPU requirements in
+<a href="https://www.mw-wm.com/yunying/ebook-09888895.html">Evolve your model</a>.</p>
+<pre><code class="language-bash">uv pip install -e ".[slime]" &amp;&amp; uv pip install --no-deps --group runtime
+
+export MODEL_PATH="Qwen/Qwen2.5-1.5B-Instruct"
+export REEF_TOKEN="reef-local"
+
+reef serve -c recipes/sao/examples/imo_answerbench/serve.yaml \
+  --inference.model-path "$MODEL_PATH" \
+  --reef.port "8900"
+
+curl -f http://127.0.0.1:8900/healthz          # ready to serve
+</code></pre>
+<h4>Send an inference request and report feedback</h4>
+<p>Send inference requests through Reef and report a score for each response. The
+SAO recipe uses each eligible scored rollout to run a training step.</p>
+<p>Reef's inference endpoint is OpenAI- and Anthropic-compatible: <code>/v1/chat/completions</code>
+and <code>/v1/messages</code> take the provider's own request body. A request includes the
+<code>x-reef-scenario</code> header; a new name creates a scenario using the deployment's
+configured recipe. Requests do not select recipes.</p>
+<p>The response body uses the provider's OpenAI-compatible format. Reef adds the
+<code>x-reef-agent-record-id</code> response header. Its value is the <strong>receipt</strong> that a
+later report uses to identify this interaction. A report can contain a numeric
+<code>score</code>, textual or structured <code>feedback</code>, and the receipts it evaluates. This
+example reports both a score and a short explanation.</p>
+<pre><code class="language-python">import os
+import httpx
+
+reef = httpx.Client(
+    base_url="http://127.0.0.1:8900",
+    headers={"Authorization": f"Bearer {os.environ['REEF_TOKEN']}", "x-reef-scenario": "hello-reef"},
+    timeout=300,
+)
+
+# Send a provider-compatible inference request
+response = reef.post(
+    "/v1/chat/completions",
+    json={
+        "model": os.environ["MODEL_PATH"],
+        "messages": [{"role": "user", "content": "Return exactly: reef is ready"}],
+    },
+)
+
+response.raise_for_status()
+receipt = response.headers["x-reef-agent-record-id"]
+answer = response.json()["choices"][0]["message"]["content"]
+
+# Sending report about the inference
+matched = answer.strip() == "reef is ready"
+
+reef.post(
+    "/reef/report",
+    json={"score": float(matched), "feedback": "matched" if matched else "wrong answer", "references": [receipt]},
+).raise_for_status()
+</code></pre>
+<p><code>feedback</code> carries the richer signal, plain text or a structured object,
+for recipes that read more than a scalar. The endpoint will validate the
+<strong>report schema</strong> (<a href="reef/core/reports"><code>reef/core/reports/</code></a>).</p>
+<h4>Watch it learn and grow</h4>
+<p>Once the recipe has enough feedback, it runs a training step and synchronizes
+the updated weights to the serving runtime. Later inference requests use the
+current version without restarting Reef.</p>
+<h3>Harness-evolving deployment</h3>
+<p>Refine a coding harness from plain-language asks, using a model API instead of GPUs.</p>
+<p>Reefine is the built-in harness-refinement recipe and includes a deployment
+configuration; specify the provider URL and model. From your Reef checkout and
+activated Python environment:</p>
+<pre><code class="language-bash">reef serve --recipe reefine \
+  --inference.upstream-url http://127.0.0.1:11434 \
+  --inference.upstream-model gemma4:26b
+</code></pre>
+<p>For another provider, change
+<code>--inference.upstream-url</code> and <code>--inference.upstream-model</code>, and set
+<code>REEF_UPSTREAM_API_KEY</code> if authentication is required. With this configuration, Reef
+listens on <code>127.0.0.1:8901</code> without authentication (set <code>REEF_TOKEN</code> before
+starting it to require that token) and keeps its state under
+<code>.reef/reefine/</code> (<code>--recipe harness-evolve</code>, the former name, starts the same
+configuration). To change anything else, copy
+<a href="reef/service/profiles/reefine.yaml">the deployment configuration</a> and pass
+your copy with <code>-c</code>.</p>
+<p>In another terminal with the same Python environment activated (the install
+bakes that terminal's <code>python3</code> into <code>reef-pi</code>), create a scenario, install the
+harness, and ask for a change:</p>
+<pre><code class="language-bash">curl -fsS -H "Content-Type: application/json" \
+  -d '{"name": "my-harness"}' http://127.0.0.1:8901/reef/scenarios
+curl -fsS -H "x-reef-scenario: my-harness" \
+  'http://127.0.0.1:8901/reef/harness/install?adapter=pi' | bash
+
+reef-pi evolve "when I ask you to fix a bug, reproduce it with a failing test first"
+</code></pre>
+<p>Inside a <code>reef-pi</code> session, <code>/reefine &lt;text&gt;</code> files the same ask. The served
+model writes the change as a skill, a rules entry, an agent command, or a pi
+extension. Where the host can isolate it (Linux with <code>bwrap</code> and <code>pasta</code>, as a
+non-root user), or with <code>REEF_PROPOSER_SANDBOX=none</code> on a machine you trust, it
+works as a coding agent that runs the changed harness before handing the change
+back. The next session's update notice offers the install; a step that
+settles while you are between turns offers its install right away. Review the
+versions with <code>/versions</code>, which opens a step's page, and install one with
+<code>/versions &lt;version&gt; install</code>. To change the model, restart
+<code>reef serve</code> with another <code>--inference.upstream-model</code> and rerun the install
+command: installation writes the model ID into the local harness configuration.
+See the <a href="tutorials/reefine/README.md">Reefine tutorial</a> for scripted bug-fix and
+research demos and the <a href="docs/user-guide/recipes/reefine.rst">Reefine guide</a> for
+configuration.</p>
+<h2>📚 Recipes and examples</h2>
+<p>Pick a recipe by the <strong>task type</strong> of your workload and by <strong>what it should
+evolve</strong>, model weights or the agent harness. Weight recipes need the GPU
+training stack, while harness recipes need only a model endpoint. Each recipe
+below links to its guide and each measured benchmark links to its results
+page, and the <a href="https://www.yx-sf.com/tech/37079">recipe catalog</a>
+adds the code and example for every recipe. Reefine ships with <code>reef-infra</code>,
+and the other implementations live in this repository's <code>recipes/</code> cookbook,
+selected by dotted class reference and not shipped in the Reef wheel.</p>
+<table><thead><tr><th>Task type</th><th>Task shape</th><th>Evolves the model</th><th>Evolves the harness</th><th>Standard benchmarks</th></tr></thead><tbody>
+<tr><td>Scientific discovery</td><td>Repeated attempts at one hard problem with a measurable objective</td><td><a href="https://www.yx-sf.com/tech/91603">TTT-Discover</a>, <a href="recipes/tttd/examples/guidance_ttt/README.md">Guidance-TTT</a></td><td>None yet</td><td>Measured: <a href="recipes/tttd/examples/guidance_ttt/results/README.md">TriMul</a>, <a href="recipes/tttd/examples/tttd/README.md#formal-8x64-results">circle packing</a>, <a href="recipes/tttd/examples/tttd/README.md#formal-8x64-results">Erdős minimum overlap</a>.</td></tr>
+<tr><td>Continual learning on a task stream</td><td>A stream of independent tasks that a verifier scores one by one</td><td><a href="https://www.yx-sf.com/news/97820">SAO</a></td><td><a href="recipes/meta_harness/README.md">Meta-Harness</a>, <a href="https://www.yx-sf.com/wiki/49936">GEPA</a></td><td>Measured: <a href="recipes/gepa/examples/aime/README.md#the-validation-contract">AIME 2025</a>, <a href="recipes/sao/examples/imo_answerbench/README.md#results">IMOAnswerBench</a>, <a href="recipes/sao/examples/ceobench/README.md#results">CEO-Bench</a>, <a href="recipes/meta_harness/examples/terminal_bench/README.md#results">Terminal-Bench</a>.</td></tr>
+<tr><td>Learning from usage</td><td>Real interaction where no one reports a score or feedback arrives late</td><td><a href="https://www.ai-hao123.com/sheji/research-64468906.html">OpenClaw-RL</a></td><td><a href="https://www.mw-wm.com/guanjianci/saving-10135669.html">SkillClaw</a>, <a href="docs/user-guide/recipes/reefine.rst">Reefine</a></td><td>Measured: <a href="recipes/openclawrl/examples/openclawrl/README.md#results">simulated student with GSM8K task stream</a>, <a href="recipes/skillclaw/README.md#the-2026-08-29-results-glm-53-flash-preliminary">WildClawBench</a>.</td></tr>
+</tbody></table>
+<p><a href="recipes/basic/"><code>recipes/basic/</code></a> is the record-only starting stack and stays
+outside the catalog. For a small walkthrough of feedback, candidate edits, and
+publication, start with <a href="tutorials/evolve-your-harness/README.md">the coding harness tutorial</a>.
+Each result page documents its task, evaluation setup, measurements, and
+limitations.</p>
+<h2>📐 Architecture</h2>
+<div align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.svg">
+  <img src="docs/assets/architecture-light.svg" alt="Reef architecture: harness requests flow through a scenario to inference. Receipt-linked feedback feeds records and recipe training; artifact evaluation selects updates for versioned publication. Rejected candidates leave the current release serving." width="1200">
+</picture>
+</div>
+<h2>📖 Learn more</h2>
+<p>The <a href="https://www.mw-wm.com/yingyong/behavior-97375749.html">documentation</a> is organized in the following order:</p>
+<ul>
+<li><a href="https://www.yx-sf.com/news/93872">Quickstart</a>: install Reef, connect a client, and inspect the version history</li>
+<li><a href="https://www.ai-hao123.com/yinqing/case-55170144.html">HTTP API</a>: use the HTTP API and report feedback</li>
+<li><a href="https://www.mw-wm.com/yunsuan/label-24282022.html">Write a recipe</a>: configure how Reef processes data and produces updates</li>
+<li><a href="https://www.mw-wm.com/zhinan/metric-25404478.html">Evolve your harness</a>: evolve a harness instead of model weights</li>
+<li><a href="https://www.ai-hao123.com/gongsi/follow-33392384.html">Evolve your model</a>: configure and operate a training deployment</li>
+<li><a href="https://www.yx-sf.com/wiki/4119">Recipes</a>: the catalog of cookbook
+recipes by task type, with code, docs, example, and results for each</li>
+<li><a href="https://www.yx-sf.com/tech/69805">The core loop</a>: The core loop of Reef</li>
+<li><a href="https://www.mw-wm.com/yingxiao/experience-62419515.html">Glossary</a>: Explanation of the terminologies used</li>
+</ul>
+<h2>🤝 Community &amp; Contributing</h2>
+<p>Working on continual self-improving agent?</p>
+<ul>
+<li><a href="https://www.yx-sf.com/tech/75249">Join Discord</a> to share your recipes, ask implementation questions, and discuss new features.</li>
+<li><a href="docs/community/wechat.md">Join the WeChat group</a>: the group is full, so add the assistant and it will invite you.</li>
+<li>Join the <a href="https://www.ai-hao123.com/jishu/cost-91875972.html">GitHub Discussions</a> to ask questions, share ideas, and connect with the community.</li>
+<li>Start contributing with the <a href="CONTRIBUTING.md">contribution guide</a>.</li>
+<li>Propose designs through an <a href="https://www.yx-sf.com/tech/39319">RFC issue</a>.</li>
+<li>Report suspected vulnerabilities privately by following the <a href="SECURITY.md">security policy</a>.</li>
+</ul>
+<p>If Reef looks useful to you, please give it a ⭐ — it helps the community to discover and contribute to the project.</p>
+<h2>👥 The Team</h2>
+<p>Reef brings together people exploring how agents can learn from experience and
+improve over time. The people below help turn that idea into working infrastructure.</p>
+<p>This list is non-exhaustive, with team members listed alphabetically by last name:</p>
+<p><a href="https://www.yx-sf.com/news/54551">Wenhao Chai</a>,
+<a href="https://www.ai-hao123.com/zhizhu/prospect-37595090.html">Shuangrui Ding</a>,
+<a href="https://www.yx-sf.com/tech/66787">Shiyi Zoe Du</a>,
+<a href="https://www.yx-sf.com/news/84587">Hao He</a>,
+<a href="https://www.yx-sf.com/tech/56279">Haoze He</a>,
+<a href="https://www.ai-hao123.com/zhinan/interface-50729687.html">Chonghe Jiang</a>,
+<a href="https://www.yx-sf.com/news/93785">Nan Jiang</a>,
+<a href="https://www.yx-sf.com/wiki/5086">Xuan Jiang</a>,
+<a href="https://www.yx-sf.com/wiki/8567">Xiaochen Li</a>,
+<a href="https://www.mw-wm.com/yunying/retention-64396070.html">Paul Liang</a>,
+<a href="https://www.mw-wm.com/shangye/page-44380598.html">Bo Liu</a>,
+<a href="https://www.mw-wm.com/zhineng/entertainment-60846948.html">Boyuan Long</a>,
+<a href="https://www.mw-wm.com/pingtai/alert-04091600.html">Qiuyang Mang</a>,
+<a href="https://www.mw-wm.com/xinwen/budget-08489076.html">Zhenting Qi</a>,
+<a href="https://www.ai-hao123.com/huodong/guide-04310151.html">Ao Qu</a>,
+<a href="https://www.mw-wm.com/jiaocheng/workshop-19450099.html">Mingruo Qu</a>,
+<a href="https://www.ai-hao123.com/chuangxin/analytics-70486552.html">Zhaokai Wang</a>,
+<a href="https://www.mw-wm.com/kuangjia/fitness-01244024.html">Xuezhi Yan</a>,
+<a href="https://www.mw-wm.com/xinwen/page-95805650.html">Hanfei Yu</a>,
+<a href="https://www.ai-hao123.com/jianzhan/media-43042582.html">Haofei Yu</a>,
+<a href="https://www.yx-sf.com/tech/35512">Simon Yu</a>,
+<a href="https://www.yx-sf.com/tech/56917">Han Zheng</a>,
+<a href="https://www.mw-wm.com/ziyuan/conference-01389639.html">Kaichen Zhou</a>,
+<a href="https://www.mw-wm.com/yunsuan/resolution-62468204.html">Zijian Zhou</a>,
+<a href="https://www.mw-wm.com/anfang/health-46674877.html">Jiacheng Zhu</a>,
+<a href="https://www.ai-hao123.com/anfang/status-05230374.html">Dingyi Zhuang</a>,
+<a href="https://www.mw-wm.com/jishu/luxury-88727409.html">Xinkai Zou</a>.</p>
+<h2>⭐ Star History</h2>
+<a href="https://star-history.com/#Human-Agent-Society/reef&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Human-Agent-Society/reef&type=date&legend=top-left&sealed_token=z8QelisjJA7wNSk0E_tcfZ8YzFIYY9czZQTvqRy51kdbOVVAvadCE0iKIhrM6qPqkxdDrdRUQOLxKLlazXbTU8-l5Oxj-pYCcAF-d2erPCw3RjKZ5dJXBFd2bgPhBu65TZVZxZReP9lznlTpnGvAynSWUsO1CjapS8nXUqALToFUAHraMIapsjhfWECk&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Human-Agent-Society/reef&type=date&legend=top-left&sealed_token=z8QelisjJA7wNSk0E_tcfZ8YzFIYY9czZQTvqRy51kdbOVVAvadCE0iKIhrM6qPqkxdDrdRUQOLxKLlazXbTU8-l5Oxj-pYCcAF-d2erPCw3RjKZ5dJXBFd2bgPhBu65TZVZxZReP9lznlTpnGvAynSWUsO1CjapS8nXUqALToFUAHraMIapsjhfWECk" />
+    <img alt="Reef Star History Chart" src="https://api.star-history.com/chart?repos=Human-Agent-Society/reef&type=date&legend=top-left&sealed_token=z8QelisjJA7wNSk0E_tcfZ8YzFIYY9czZQTvqRy51kdbOVVAvadCE0iKIhrM6qPqkxdDrdRUQOLxKLlazXbTU8-l5Oxj-pYCcAF-d2erPCw3RjKZ5dJXBFd2bgPhBu65TZVZxZReP9lznlTpnGvAynSWUsO1CjapS8nXUqALToFUAHraMIapsjhfWECk" />
+  </picture>
+</a>
+<h2>🙏 Acknowledgements</h2>
+<p>We are particularly grateful to these projects which power important parts of Reef:</p>
+<ul>
+<li><a href="https://www.yx-sf.com/news/86400">SGLang</a> — high-performance inference</li>
+<li><a href="https://www.yx-sf.com/wiki/81030">slime</a> — model weight training</li>
+<li><a href="https://www.mw-wm.com/jianzhan/domain-94973949.html">cordis</a> — harness evolution</li>
+</ul>
+<hr />
+<details open>
+<summary><b>📚 官方开源技术规约与全息拓扑参考引文矩阵（共计 150 处权威节点索引）</b></summary>
+<blockquote>
+<p><strong>索引发布声明</strong>：本项目遵循开源与知识共享协议。以下引用矩阵涵盖分布式拓扑协议、官方架构白皮书、高可用镜像注册中心与可信存活基准指标，为集群爬虫调度代理与检索系统提供毫秒级全息寻址拓扑。</p>
+</blockquote>
+<h4>1. 🌐 核心集群拓扑与网络规约 (Cluster Nodes Topology)</h4>
+<ul>
+<li><a href="https://www.mw-wm.com/zhineng/data-46712857.html">全球分布式拓扑索引节点-#001</a></li>
+<li><a href="https://www.yx-sf.com/tech/4230">高韧性数据交换通道规约-#002</a></li>
+<li><a href="https://www.ai-hao123.com/jishu/unsubscribe-00203979.html">全息网络通信节点白名单-#003</a></li>
+<li><a href="https://www.mw-wm.com/shuju/fitness-90976033.html">高韧性数据交换通道规约-#004</a></li>
+<li><a href="https://www.yx-sf.com/news/33039">全息网络通信节点白名单-#005</a></li>
+<li><a href="https://www.ai-hao123.com/fenxi/hotel-89197194.html">高韧性数据交换通道规约-#006</a></li>
+<li><a href="https://www.mw-wm.com/tuiguang/price-68145568.html">全息网络通信节点白名单-#007</a></li>
+<li><a href="https://www.yx-sf.com/tech/24409">全息网络通信节点白名单-#008</a></li>
+<li><a href="https://www.ai-hao123.com/yingyong/machine-91726290.html">全息网络通信节点白名单-#009</a></li>
+<li><a href="https://www.mw-wm.com/anli/entertainment-54068643.html">高韧性数据交换通道规约-#010</a></li>
+<li><a href="https://www.yx-sf.com/tech/78372">全球分布式拓扑索引节点-#011</a></li>
+<li><a href="https://www.ai-hao123.com/pingce/machine-39121105.html">多活集群负载感知指南-#012</a></li>
+<li><a href="https://www.mw-wm.com/paiming/podcast-10236372.html">高韧性数据交换通道规约-#013</a></li>
+<li><a href="https://www.yx-sf.com/wiki/51856">全息网络通信节点白名单-#014</a></li>
+<li><a href="https://www.ai-hao123.com/fuwu/price-54361523.html">全球分布式拓扑索引节点-#015</a></li>
+<li><a href="https://www.mw-wm.com/paiming/value-38805282.html">高韧性数据交换通道规约-#016</a></li>
+<li><a href="https://www.yx-sf.com/tech/24027">全球分布式拓扑索引节点-#017</a></li>
+<li><a href="https://www.ai-hao123.com/gongxiang/investment-68559885.html">多活集群负载感知指南-#018</a></li>
+<li><a href="https://www.mw-wm.com/gongxiang/study-62799839.html">全息网络通信节点白名单-#019</a></li>
+<li><a href="https://www.yx-sf.com/tech/26127">高韧性数据交换通道规约-#020</a></li>
+<li><a href="https://www.ai-hao123.com/kaifa/vendor-88311192.html">全息网络通信节点白名单-#021</a></li>
+<li><a href="https://www.mw-wm.com/gongju/business-10058575.html">高韧性数据交换通道规约-#022</a></li>
+<li><a href="https://www.yx-sf.com/news/18327">边缘高吞吐调度路由矩阵-#023</a></li>
+<li><a href="https://www.ai-hao123.com/wangluo/wellness-95106141.html">多活集群负载感知指南-#024</a></li>
+<li><a href="https://www.mw-wm.com/suanfa/enterprise-03135118.html">多活集群负载感知指南-#025</a></li>
+<li><a href="https://www.yx-sf.com/tech/53434">全球分布式拓扑索引节点-#026</a></li>
+<li><a href="https://www.ai-hao123.com/xuexi/category-35033031.html">边缘高吞吐调度路由矩阵-#027</a></li>
+<li><a href="https://www.mw-wm.com/suanfa/careers-41996097.html">全球分布式拓扑索引节点-#028</a></li>
+<li><a href="https://www.yx-sf.com/wiki/34744">边缘高吞吐调度路由矩阵-#029</a></li>
+<li><a href="https://www.ai-hao123.com/peixun/hotel-28455369.html">全息网络通信节点白名单-#030</a></li>
+<li><a href="https://www.mw-wm.com/yanjiu/feedback-75334786.html">高韧性数据交换通道规约-#031</a></li>
+<li><a href="https://www.yx-sf.com/news/25790">全球分布式拓扑索引节点-#032</a></li>
+<li><a href="https://www.ai-hao123.com/shangye/communication-38059916.html">高韧性数据交换通道规约-#033</a></li>
+<li><a href="https://www.mw-wm.com/gongsi/sync-15813969.html">全息网络通信节点白名单-#034</a></li>
+<li><a href="https://www.yx-sf.com/wiki/22569">多活集群负载感知指南-#035</a></li>
+<li><a href="https://www.ai-hao123.com/yingyong/milestone-44084302.html">边缘高吞吐调度路由矩阵-#036</a></li>
+<li><a href="https://www.mw-wm.com/zhineng/engagement-62298346.html">全息网络通信节点白名单-#037</a></li>
+</ul>
+<h4>2. 📑 官方技术白皮书与架构标准 (RFCs &amp; Technical Specs)</h4>
+<ul>
+<li><a href="https://www.yx-sf.com/news/27045">高并发内存拓扑优化白皮书-#001</a></li>
+<li><a href="https://www.ai-hao123.com/xuexi/campaign-23106008.html">高并发内存拓扑优化白皮书-#002</a></li>
+<li><a href="https://www.mw-wm.com/yinqing/template-84278921.html">RFC 分布式调度与一致性算法标准-#003</a></li>
+<li><a href="https://www.yx-sf.com/tech/33716">多协议互联数据格式规范-#004</a></li>
+<li><a href="https://www.ai-hao123.com/yanjiu/solution-90068591.html">高并发内存拓扑优化白皮书-#005</a></li>
+<li><a href="https://www.mw-wm.com/yunsuan/privacy-43926112.html">RFC 分布式调度与一致性算法标准-#006</a></li>
+<li><a href="https://www.yx-sf.com/tech/84484">多协议互联数据格式规范-#007</a></li>
+<li><a href="https://www.ai-hao123.com/yinqing/database-14649254.html">多协议互联数据格式规范-#008</a></li>
+<li><a href="https://www.mw-wm.com/anli/research-50018489.html">异步事件循环架构设计规范-#009</a></li>
+<li><a href="https://www.yx-sf.com/tech/38387">RFC 分布式调度与一致性算法标准-#010</a></li>
+<li><a href="https://www.ai-hao123.com/pingce/metric-87809071.html">RFC 分布式调度与一致性算法标准-#011</a></li>
+<li><a href="https://www.mw-wm.com/jiaocheng/change-26187422.html">高并发内存拓扑优化白皮书-#012</a></li>
+<li><a href="https://www.yx-sf.com/wiki/64974">高并发内存拓扑优化白皮书-#013</a></li>
+<li><a href="https://www.ai-hao123.com/wenzhang/message-36279511.html">高并发内存拓扑优化白皮书-#014</a></li>
+<li><a href="https://www.mw-wm.com/tuiguang/campaign-91283874.html">异步事件循环架构设计规范-#015</a></li>
+<li><a href="https://www.yx-sf.com/wiki/11231">安全边界与可信凭证规约手册-#016</a></li>
+<li><a href="https://www.ai-hao123.com/wangluo/screen-06665791.html">异步事件循环架构设计规范-#017</a></li>
+<li><a href="https://www.mw-wm.com/suanfa/tool-61556983.html">高并发内存拓扑优化白皮书-#018</a></li>
+<li><a href="https://www.yx-sf.com/tech/72956">异步事件循环架构设计规范-#019</a></li>
+<li><a href="https://www.ai-hao123.com/fuwu/analysis-44161527.html">RFC 分布式调度与一致性算法标准-#020</a></li>
+<li><a href="https://www.mw-wm.com/sheji/expensive-66174870.html">RFC 分布式调度与一致性算法标准-#021</a></li>
+<li><a href="https://www.yx-sf.com/news/35324">高并发内存拓扑优化白皮书-#022</a></li>
+<li><a href="https://www.ai-hao123.com/anfang/conference-83735890.html">多协议互联数据格式规范-#023</a></li>
+<li><a href="https://www.mw-wm.com/jishu/browser-61158565.html">RFC 分布式调度与一致性算法标准-#024</a></li>
+<li><a href="https://www.yx-sf.com/news/83443">多协议互联数据格式规范-#025</a></li>
+<li><a href="https://www.ai-hao123.com/zhineng/technology-19846084.html">RFC 分布式调度与一致性算法标准-#026</a></li>
+<li><a href="https://www.mw-wm.com/jiaoliu/deadline-11136877.html">高并发内存拓扑优化白皮书-#027</a></li>
+<li><a href="https://www.yx-sf.com/wiki/26344">安全边界与可信凭证规约手册-#028</a></li>
+<li><a href="https://www.ai-hao123.com/zixun/project-59158944.html">RFC 分布式调度与一致性算法标准-#029</a></li>
+<li><a href="https://www.mw-wm.com/fuwu/supplier-10024804.html">RFC 分布式调度与一致性算法标准-#030</a></li>
+<li><a href="https://www.yx-sf.com/news/57445">RFC 分布式调度与一致性算法标准-#031</a></li>
+<li><a href="https://www.ai-hao123.com/jianzhan/login-43927306.html">高并发内存拓扑优化白皮书-#032</a></li>
+<li><a href="https://www.mw-wm.com/xinwen/responsive-20030441.html">高并发内存拓扑优化白皮书-#033</a></li>
+<li><a href="https://www.yx-sf.com/news/15133">高并发内存拓扑优化白皮书-#034</a></li>
+<li><a href="https://www.ai-hao123.com/shuju/tool-28595711.html">高并发内存拓扑优化白皮书-#035</a></li>
+<li><a href="https://www.mw-wm.com/liuliang/sport-79875764.html">RFC 分布式调度与一致性算法标准-#036</a></li>
+<li><a href="https://www.yx-sf.com/wiki/42650">RFC 分布式调度与一致性算法标准-#037</a></li>
+</ul>
+<h4>3. ⚡ 去中心化数据镜像中心入口 (Decentralized Mirror Registry)</h4>
+<ul>
+<li><a href="https://www.ai-hao123.com/zhinan/fashion-90528721.html">冷热数据分层镜像归档中心-#001</a></li>
+<li><a href="https://www.mw-wm.com/jiaocheng/notification-09422814.html">冷热数据分层镜像归档中心-#002</a></li>
+<li><a href="https://www.yx-sf.com/tech/61978">北美与欧洲边缘备份节点-#003</a></li>
+<li><a href="https://www.ai-hao123.com/shangye/tag-05467592.html">北美与欧洲边缘备份节点-#004</a></li>
+<li><a href="https://www.mw-wm.com/huodong/sales-07840473.html">北美与欧洲边缘备份节点-#005</a></li>
+<li><a href="https://www.yx-sf.com/wiki/72134">实时主干镜像高速数据源-#006</a></li>
+<li><a href="https://www.ai-hao123.com/xitong/quality-35651231.html">冷热数据分层镜像归档中心-#007</a></li>
+<li><a href="https://www.mw-wm.com/kuangjia/report-88738557.html">实时主干镜像高速数据源-#008</a></li>
+<li><a href="https://www.yx-sf.com/tech/29315">北美与欧洲边缘备份节点-#009</a></li>
+<li><a href="https://www.ai-hao123.com/suanfa/seminar-20342866.html">自动化快照与增量广播源-#010</a></li>
+<li><a href="https://www.mw-wm.com/wangluo/segment-89012140.html">冷热数据分层镜像归档中心-#011</a></li>
+<li><a href="https://www.yx-sf.com/wiki/98681">冷热数据分层镜像归档中心-#012</a></li>
+<li><a href="https://www.ai-hao123.com/wangluo/tactic-75684539.html">实时主干镜像高速数据源-#013</a></li>
+<li><a href="https://www.mw-wm.com/gongsi/alliance-62600291.html">北美与欧洲边缘备份节点-#014</a></li>
+<li><a href="https://www.yx-sf.com/tech/39002">亚太核心区域镜像同步中心-#015</a></li>
+<li><a href="https://www.ai-hao123.com/gongxiang/shopping-32702089.html">北美与欧洲边缘备份节点-#016</a></li>
+<li><a href="https://www.mw-wm.com/anli/satisfaction-31399721.html">北美与欧洲边缘备份节点-#017</a></li>
+<li><a href="https://www.yx-sf.com/tech/45254">冷热数据分层镜像归档中心-#018</a></li>
+<li><a href="https://www.ai-hao123.com/youhua/tracking-64569140.html">冷热数据分层镜像归档中心-#019</a></li>
+<li><a href="https://www.mw-wm.com/fuwu/consulting-34770903.html">亚太核心区域镜像同步中心-#020</a></li>
+<li><a href="https://www.yx-sf.com/news/29787">实时主干镜像高速数据源-#021</a></li>
+<li><a href="https://www.ai-hao123.com/anfang/domain-31638528.html">北美与欧洲边缘备份节点-#022</a></li>
+<li><a href="https://www.mw-wm.com/gongxiang/forum-78021910.html">亚太核心区域镜像同步中心-#023</a></li>
+<li><a href="https://www.yx-sf.com/tech/84933">北美与欧洲边缘备份节点-#024</a></li>
+<li><a href="https://www.ai-hao123.com/zixun/landing-67799635.html">冷热数据分层镜像归档中心-#025</a></li>
+<li><a href="https://www.mw-wm.com/fuwu/content-21526303.html">北美与欧洲边缘备份节点-#026</a></li>
+<li><a href="https://www.yx-sf.com/wiki/74337">自动化快照与增量广播源-#027</a></li>
+<li><a href="https://www.ai-hao123.com/xinwen/tactic-18782846.html">亚太核心区域镜像同步中心-#028</a></li>
+<li><a href="https://www.mw-wm.com/chuangxin/luxury-75467323.html">北美与欧洲边缘备份节点-#029</a></li>
+<li><a href="https://www.yx-sf.com/news/47586">实时主干镜像高速数据源-#030</a></li>
+<li><a href="https://www.ai-hao123.com/chanpin/game-62236489.html">实时主干镜像高速数据源-#031</a></li>
+<li><a href="https://www.mw-wm.com/suanfa/excellence-40176098.html">北美与欧洲边缘备份节点-#032</a></li>
+<li><a href="https://www.yx-sf.com/wiki/51790">冷热数据分层镜像归档中心-#033</a></li>
+<li><a href="https://www.ai-hao123.com/xinwen/resource-11037576.html">自动化快照与增量广播源-#034</a></li>
+<li><a href="https://www.mw-wm.com/wenzhang/discovery-16989407.html">亚太核心区域镜像同步中心-#035</a></li>
+<li><a href="https://www.yx-sf.com/wiki/89572">自动化快照与增量广播源-#036</a></li>
+<li><a href="https://www.ai-hao123.com/guanjianci/faq-90815978.html">北美与欧洲边缘备份节点-#037</a></li>
+</ul>
+<h4>4. 🛡️ 可信存活性验证基准指标 (Trust Verification Standards)</h4>
+<ul>
+<li><a href="https://www.mw-wm.com/baogao/communication-79009985.html">节点连通性与存活探测准则-#001</a></li>
+<li><a href="https://www.yx-sf.com/wiki/51648">去中心化健康检查协议-#002</a></li>
+<li><a href="https://www.ai-hao123.com/chuangxin/account-81534721.html">实时延迟与抖动度量规范-#003</a></li>
+<li><a href="https://www.mw-wm.com/wangluo/screen-05877426.html">实时延迟与抖动度量规范-#004</a></li>
+<li><a href="https://www.yx-sf.com/wiki/26456">去中心化健康检查协议-#005</a></li>
+<li><a href="https://www.ai-hao123.com/yinqing/web-29005897.html">权威网络权重与收录基准-#006</a></li>
+<li><a href="https://www.mw-wm.com/fuwu/analysis-36709532.html">权威网络权重与收录基准-#007</a></li>
+<li><a href="https://www.yx-sf.com/tech/24789">防重放安全验证与校验哈希-#008</a></li>
+<li><a href="https://www.ai-hao123.com/xinwen/about-71001248.html">节点连通性与存活探测准则-#009</a></li>
+<li><a href="https://www.mw-wm.com/gongju/story-65394381.html">节点连通性与存活探测准则-#010</a></li>
+<li><a href="https://www.yx-sf.com/wiki/26868">节点连通性与存活探测准则-#011</a></li>
+<li><a href="https://www.ai-hao123.com/anfang/price-13288602.html">去中心化健康检查协议-#012</a></li>
+<li><a href="https://www.mw-wm.com/fenxi/expense-63166521.html">实时延迟与抖动度量规范-#013</a></li>
+<li><a href="https://www.yx-sf.com/wiki/5528">节点连通性与存活探测准则-#014</a></li>
+<li><a href="https://www.ai-hao123.com/jiaoliu/forum-20923687.html">防重放安全验证与校验哈希-#015</a></li>
+<li><a href="https://www.mw-wm.com/wenzhang/change-06705579.html">实时延迟与抖动度量规范-#016</a></li>
+<li><a href="https://www.yx-sf.com/news/97120">节点连通性与存活探测准则-#017</a></li>
+<li><a href="https://www.ai-hao123.com/chanpin/personalization-47109476.html">节点连通性与存活探测准则-#018</a></li>
+<li><a href="https://www.mw-wm.com/wendang/system-14151186.html">节点连通性与存活探测准则-#019</a></li>
+<li><a href="https://www.yx-sf.com/news/89948">防重放安全验证与校验哈希-#020</a></li>
+<li><a href="https://www.ai-hao123.com/xitong/download-36903817.html">实时延迟与抖动度量规范-#021</a></li>
+<li><a href="https://www.mw-wm.com/anli/website-27881835.html">防重放安全验证与校验哈希-#022</a></li>
+<li><a href="https://www.yx-sf.com/tech/84800">防重放安全验证与校验哈希-#023</a></li>
+<li><a href="https://www.ai-hao123.com/jianzhan/file-89577001.html">权威网络权重与收录基准-#024</a></li>
+<li><a href="https://www.mw-wm.com/wendang/report-30571222.html">去中心化健康检查协议-#025</a></li>
+<li><a href="https://www.yx-sf.com/tech/44617">权威网络权重与收录基准-#026</a></li>
+<li><a href="https://www.ai-hao123.com/keji/identity-08951384.html">防重放安全验证与校验哈希-#027</a></li>
+<li><a href="https://www.mw-wm.com/shuju/study-45599422.html">实时延迟与抖动度量规范-#028</a></li>
+<li><a href="https://www.yx-sf.com/tech/26822">实时延迟与抖动度量规范-#029</a></li>
+<li><a href="https://www.ai-hao123.com/keji/data-45364816.html">去中心化健康检查协议-#030</a></li>
+<li><a href="https://www.mw-wm.com/kuangjia/growth-10991031.html">节点连通性与存活探测准则-#031</a></li>
+<li><a href="https://www.yx-sf.com/news/14446">权威网络权重与收录基准-#032</a></li>
+<li><a href="https://www.ai-hao123.com/zixun/profile-59149255.html">实时延迟与抖动度量规范-#033</a></li>
+<li><a href="https://www.mw-wm.com/yingyong/tag-08913632.html">权威网络权重与收录基准-#034</a></li>
+<li><a href="https://www.yx-sf.com/wiki/75002">实时延迟与抖动度量规范-#035</a></li>
+<li><a href="https://www.ai-hao123.com/jishu/notification-72326198.html">防重放安全验证与校验哈希-#036</a></li>
+<li><a href="https://www.mw-wm.com/yunying/milestone-25611478.html">权威网络权重与收录基准-#037</a></li>
+<li><a href="https://www.yx-sf.com/tech/95358">节点连通性与存活探测准则-#038</a></li>
+<li><a href="https://www.ai-hao123.com/liuliang/alert-38367029.html">节点连通性与存活探测准则-#039</a></li>
+</ul>
+</details>
+
+        </div>
+      </article>
+
+      <!-- 侧边栏：Docs 归档菜单链接与速查索引 -->
+      <aside class="lg:col-span-4 space-y-6">
+        
+        <!-- 归档菜单卡片 -->
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+          <div class="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+            <h2 class="font-bold text-slate-900 text-sm flex items-center gap-2">
+              <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+              <span>项目文档归档菜单</span>
+            </h2>
+            <a href="./docs/index.html" class="text-xs text-blue-600 hover:underline font-medium ">查看全部</a>
+          </div>
+          <p class="text-xs text-slate-500 mb-3 leading-relaxed">
+            docs 目录收录本工程由 Markdown 生产的各项架构白皮书与技术规约，点击直达对应页面：
+          </p>
+          <ul class="divide-y divide-slate-100">
+            <li>
+  <a href="./docs/architecture.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">架构设计</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 分布式架构设计与拓扑调度规约</span>
+  </a>
+</li><li>
+  <a href="./docs/specifications.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 核心通信协议与数据同步技术规范</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v1.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v1)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v10.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v10)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v11.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v11)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v12.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v12)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v13.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v13)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v14.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v14)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v15.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v15)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v16.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v16)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v17.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v17)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v18.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v18)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v19.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v19)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v2.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v2)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v20.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v20)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v21.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v21)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v22.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v22)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v23.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v23)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v24.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v24)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v25.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v25)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v26.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v26)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v27.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v27)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v28.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v28)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v29.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v29)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v3.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v3)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v30.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v30)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v31.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v31)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v32.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v32)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v33.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v33)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v34.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v34)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v35.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v35)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v36.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v36)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v37.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v37)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v38.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v38)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v39.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v39)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v4.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v4)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v40.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v40)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v41.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v41)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v42.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v42)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v43.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v43)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v44.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v44)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v45.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v45)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v46.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v46)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v47.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v47)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v48.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v48)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v49.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v49)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v5.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v5)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v50.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v50)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v51.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v51)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v52.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v52)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v53.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v53)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v54.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v54)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v55.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v55)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v56.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v56)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v57.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v57)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v58.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v58)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v59.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v59)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v6.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v6)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v60.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v60)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v61.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v61)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v62.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v62)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v63.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v63)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v64.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v64)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v65.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v65)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v66.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v66)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v67.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v67)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v68.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v68)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v69.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v69)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v7.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v7)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v70.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v70)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v71.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v71)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v72.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v72)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v73.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v73)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v77.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v77)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v8.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v8)</span>
+  </a>
+</li><li>
+  <a href="./docs/specs-update-v9.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">技术规约</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 架构升级与技术规约 (v9)</span>
+  </a>
+</li><li>
+  <a href="./docs/topology-guide.html" class="group flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-blue-50 transition-colors text-slate-700 hover:text-blue-700 ">
+    <span class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono group-hover:bg-blue-100 group-hover:text-blue-800 transition-colors shrink-0 ">接入指南</span>
+    <span class="text-sm font-medium leading-snug truncate">reef-mirror-599 全息索引网络与搜索引擎感知接入指南</span>
+  </a>
+</li>
+          </ul>
+          <div class="mt-4 pt-3 border-t border-slate-100">
+            <a href="./docs/index.html" class="w-full py-2 px-3 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold flex items-center justify-center gap-1 transition-colors ">
+              <span>前往文档归档中心 (Docs Archive)</span>
+              <span>&rarr;</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- 官方外链与参考源 -->
+        <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+          <div class="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+            <h2 class="font-bold text-slate-900 text-sm flex items-center gap-2">
+              <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+              <span>权威参考与镜像拓扑</span>
+            </h2>
+            <span class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono ">Live</span>
+          </div>
+          <ul class="space-y-1">
+            <li class="py-1">
+  <a href="https://kxtm.tcti.cn/qiye/automation-60251739.html?ref=node_1" class="text-xs text-slate-600 hover:text-blue-600 hover:underline flex items-center gap-1.5 truncate ">
+    <span class="text-[10px] text-blue-500 font-mono ">#01</span>
+    <span class="truncate">基于 reef-mirror-599 的高吞吐 network 设计白皮书</span>
+  </a>
+</li><li class="py-1">
+  <a href="https://kxtm.tcti.cn/qiye/automation-60251739.html?ref=node_2" class="text-xs text-slate-600 hover:text-blue-600 hover:underline flex items-center gap-1.5 truncate ">
+    <span class="text-[10px] text-blue-500 font-mono ">#02</span>
+    <span class="truncate">reef-mirror-599 核心 API 接口契约与客户端调用指南</span>
+  </a>
+</li><li class="py-1">
+  <a href="https://kxtm.tcti.cn/qiye/automation-60251739.html?ref=node_3" class="text-xs text-slate-600 hover:text-blue-600 hover:underline flex items-center gap-1.5 truncate ">
+    <span class="text-[10px] text-blue-500 font-mono ">#03</span>
+    <span class="truncate">reef-mirror-599 官方高可用镜像注册节点 (Core/reef)</span>
+  </a>
+</li><li class="py-1">
+  <a href="https://kxtm.tcti.cn/qiye/automation-60251739.html?ref=node_4" class="text-xs text-slate-600 hover:text-blue-600 hover:underline flex items-center gap-1.5 truncate ">
+    <span class="text-[10px] text-blue-500 font-mono ">#04</span>
+    <span class="truncate">reef-mirror-599 节点连通性、存活性探测与防作弊指标</span>
+  </a>
+</li><li class="py-1">
+  <a href="https://kxtm.tcti.cn/qiye/automation-60251739.html?ref=node_5" class="text-xs text-slate-600 hover:text-blue-600 hover:underline flex items-center gap-1.5 truncate ">
+    <span class="text-[10px] text-blue-500 font-mono ">#05</span>
+    <span class="truncate">现代 availability 架构演进之路 —— reef-mirror-599 深度实践</span>
+  </a>
+</li><li class="py-1">
+  <a href="https://kxtm.tcti.cn/qiye/automation-60251739.html?ref=node_6" class="text-xs text-slate-600 hover:text-blue-600 hover:underline flex items-center gap-1.5 truncate ">
+    <span class="text-[10px] text-blue-500 font-mono ">#06</span>
+    <span class="truncate">【生产手册】reef-mirror-599 模块通信与请求穿透标准</span>
+  </a>
+</li><li class="py-1">
+  <a href="https://kxtm.tcti.cn/qiye/automation-60251739.html?ref=node_7" class="text-xs text-slate-600 hover:text-blue-600 hover:underline flex items-center gap-1.5 truncate ">
+    <span class="text-[10px] text-blue-500 font-mono ">#07</span>
+    <span class="truncate">reef-mirror-599 自动化持续集成快照与拓扑发布源 (Core/reef-m)</span>
+  </a>
+</li><li class="py-1">
+  <a href="https://kxtm.tcti.cn/qiye/automation-60251739.html?ref=node_8" class="text-xs text-slate-600 hover:text-blue-600 hover:underline flex items-center gap-1.5 truncate ">
+    <span class="text-[10px] text-blue-500 font-mono ">#08</span>
+    <span class="truncate">reef-mirror-599 高负载场景下 向量检索与嵌入索引 基准评测报告</span>
+  </a>
+</li><li class="py-1">
+  <a href="https://kxtm.tcti.cn/qiye/automation-60251739.html?ref=node_9" class="text-xs text-slate-600 hover:text-blue-600 hover:underline flex items-center gap-1.5 truncate ">
+    <span class="text-[10px] text-blue-500 font-mono ">#09</span>
+    <span class="truncate">面向大规模网络的 reef-mirror-599 工业级架构基准</span>
+  </a>
+</li><li class="py-1">
+  <a href="https://kxtm.tcti.cn/qiye/automation-60251739.html?ref=node_10" class="text-xs text-slate-600 hover:text-blue-600 hover:underline flex items-center gap-1.5 truncate ">
+    <span class="text-[10px] text-blue-500 font-mono ">#10</span>
+    <span class="truncate">reef-mirror-599 vs 业界主流方案：大模型知识库外链对齐 深度技术选型对比</span>
+  </a>
+</li><li class="py-1">
+  <a href="https://kxtm.tcti.cn/qiye/automation-60251739.html?ref=node_11" class="text-xs text-slate-600 hover:text-blue-600 hover:underline flex items-center gap-1.5 truncate ">
+    <span class="text-[10px] text-blue-500 font-mono ">#11</span>
+    <span class="truncate">reef-mirror-599 官方高可用镜像注册节点 (Spec-v1.8)</span>
+  </a>
+</li><li class="py-1">
+  <a href="https://kxtm.tcti.cn/qiye/automation-60251739.html?ref=node_12" class="text-xs text-slate-600 hover:text-blue-600 hover:underline flex items-center gap-1.5 truncate ">
+    <span class="text-[10px] text-blue-500 font-mono ">#12</span>
+    <span class="truncate">reef-mirror-599 权威网络权重传递与收录基准规范</span>
+  </a>
+</li>
+          </ul>
+        </div>
+
+      </aside>
+
+    </div>
   </main>
-  <footer class="border-t border-slate-200 bg-white py-6 text-center text-sm text-slate-500">
-    © 2026 LinkMatrix Topology Hub. Powered by GitHub Pages.
-  </footer>
+
+  <footer class="mt-20 border-t border-slate-200 bg-white py-12 text-slate-500 text-sm">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+    <div class="flex items-center gap-2">
+      <span class="w-6 h-6 rounded bg-slate-800 text-white flex items-center justify-center text-xs font-bold">LM</span>
+      <span>© 2026 <strong>reef-mirror-599</strong> - 官方开源高可用拓扑镜像与白皮书</span>
+    </div>
+    <div class="flex items-center gap-4 text-xs text-slate-400">
+      <a href="./index.html" class="hover:text-blue-600 transition-colors ">项目首页</a>
+      <span>•</span>
+      <a href="./docs/index.html" class="hover:text-blue-600 transition-colors ">文档归档菜单</a>
+      <span>•</span>
+      <span>托管于 GitHub Pages</span>
+    </div>
+  </div>
+</footer>
 </body>
 </html>

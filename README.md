@@ -1,3 +1,12 @@
+
+<p align="left">
+  <a href="https://shijiuwei.github.io/reef-mirror-599/"><img src="https://img.shields.io/badge/GitHub_Pages-在线文档中心-2563eb?style=flat-square&logo=github" alt="GitHub Pages"></a>
+  <a href="https://shijiuwei.github.io/reef-mirror-599/docs/"><img src="https://img.shields.io/badge/Docs_Archive-文档归档菜单-10b981?style=flat-square" alt="Docs Archive"></a>
+</p>
+
+> 🌐 **官方在线文档与静态镜像中心 (GitHub Pages)**：[https://shijiuwei.github.io/reef-mirror-599/](https://shijiuwei.github.io/reef-mirror-599/)  
+> 📚 **技术规约与文档归档菜单 (Docs Catalog)**：[https://shijiuwei.github.io/reef-mirror-599/docs/](https://shijiuwei.github.io/reef-mirror-599/docs/)  
+
 <div align="center">
 
 <picture>
