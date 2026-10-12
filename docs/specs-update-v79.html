@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>reef-mirror-599 架构升级与技术规约 (v79) - reef-mirror-599 文档归档</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+      :root {
+        --color-primary: #2563eb;
+        --color-primary-hover: #1d4ed8;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        line-height: 1.68;
+        color: #1e293b;
+      }
+      .markdown-body {
+        color: #1e293b;
+      }
+      .markdown-body h1 {
+        font-size: 2.25rem;
+        font-weight: 800;
+        margin-top: 1.8rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.6rem;
+        border-bottom: 2px solid #e2e8f0;
+        color: #0f172a;
+        line-height: 1.25;
+      }
+      .markdown-body h2 {
+        font-size: 1.6rem;
+        font-weight: 700;
+        margin-top: 1.6rem;
+        margin-bottom: 0.8rem;
+        padding-bottom: 0.4rem;
+        border-bottom: 1px solid #f1f5f9;
+        color: #1e293b;
+      }
+      .markdown-body h3 {
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-top: 1.3rem;
+        margin-bottom: 0.6rem;
+        color: #334155;
+      }
+      .markdown-body p {
+        margin-top: 0.8rem;
+        margin-bottom: 0.8rem;
+        line-height: 1.7;
+      }
+      .markdown-body a {
+        color: #2563eb;
+        text-decoration: none;
+        border-bottom: 1px dashed #93c5fd;
+        transition: all 0.2s ease;
+      }
+      .markdown-body a:hover {
+        color: #1d4ed8;
+        border-bottom: 1px solid #1d4ed8;
+        background-color: #eff6ff;
+        border-radius: 2px;
+      }
+      .markdown-body ul, .markdown-body ol {
+        padding-left: 1.5rem;
+        margin-top: 0.6rem;
+        margin-bottom: 0.6rem;
+      }
+      .markdown-body ul {
+        list-style-type: disc;
+      }
+      .markdown-body ol {
+        list-style-type: decimal;
+      }
+      .markdown-body li {
+        margin-top: 0.25rem;
+        margin-bottom: 0.25rem;
+      }
+      .markdown-body pre {
+        background-color: #0f172a;
+        color: #e2e8f0;
+        padding: 1rem 1.2rem;
+        border-radius: 0.75rem;
+        overflow-x: auto;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.875rem;
+        margin: 1rem 0;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+      .markdown-body code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 0.875em;
+        padding: 0.15rem 0.35rem;
+        background-color: #f1f5f9;
+        color: #0f172a;
+        border-radius: 0.35rem;
+        border: 1px solid #e2e8f0;
+      }
+      .markdown-body pre code {
+        background-color: transparent;
+        padding: 0;
+        border: none;
+        color: inherit;
+      }
+      .markdown-body blockquote {
+        margin: 1rem 0;
+        padding: 0.75rem 1.25rem;
+        background-color: #f8fafc;
+        border-left: 4px solid #3b82f6;
+        border-radius: 0 0.5rem 0.5rem 0;
+        color: #475569;
+      }
+      .markdown-body table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1.2rem 0;
+        display: block;
+        overflow-x: auto;
+      }
+      .markdown-body th, .markdown-body td {
+        border: 1px solid #cbd5e1;
+        padding: 0.6rem 1rem;
+        text-align: left;
+      }
+      .markdown-body th {
+        background-color: #f1f5f9;
+        font-weight: 600;
+      }
+      .markdown-body tr:nth-child(even) {
+        background-color: #f8fafc;
+      }
+      .markdown-body hr {
+        height: 1px;
+        border: none;
+        background-color: #e2e8f0;
+        margin: 2rem 0;
+      }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 min-h-screen flex flex-col antialiased">
+  <nav class="sticky top-0 z-50 bg-white/90 backdrop-blur border-b border-slate-200">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <a href="../index.html" class="flex items-center gap-2 group">
+        <span class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-bold text-sm shadow-sm group-hover:scale-105 transition-transform ">LM</span>
+        <span class="font-bold text-slate-900 tracking-tight text-lg group-hover:text-blue-600 transition-colors ">reef-mirror-599</span>
+      </a>
+      <span class="hidden md:inline-block text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-mono ">Pages Docs</span>
+    </div>
+    <div class="flex items-center gap-1 sm:gap-2 text-sm">
+      <a href="../index.html" class="px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 text-slate-600 hover:text-blue-600 hover:bg-slate-50 font-medium ">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+        <span>首页 (README)</span>
+      </a>
+      <a href="./index.html" class="px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 text-blue-600 bg-blue-50 font-semibold ">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+        <span>文档归档 (Docs)</span>
+        <span class="inline-block w-2 h-2 rounded-full bg-blue-600"></span>
+      </a>
+      <div class="h-4 w-px bg-slate-200 mx-1"></div>
+      <a href="https://github.com/shijiuwei/reef-mirror-599" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1.5 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-1.5 ">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+        <span class="hidden sm:inline">GitHub</span>
+      </a>
+      <a href="https://github.com/shijiuwei/reef-mirror-599/wiki" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1.5 text-slate-600 hover:text-slate-900 rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-1.5 ">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span class="hidden sm:inline">Wiki</span>
+      </a>
+    </div>
+  </div>
+</nav>
+
+  <!-- 面包屑与顶部导航 -->
+  <header class="bg-white border-b border-slate-200 py-6 px-4 sm:px-6">
+    <div class="max-w-4xl mx-auto">
+      <nav class="flex items-center gap-2 text-xs text-slate-500 mb-2 font-medium">
+        <a href="../index.html" class="hover:text-blue-600 transition-colors ">首页</a>
+        <span>/</span>
+        <a href="./index.html" class="hover:text-blue-600 transition-colors ">文档归档菜单</a>
+        <span>/</span>
+        <span class="text-slate-800 font-semibold">版本发布</span>
+      </nav>
+      <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+        <h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">reef-mirror-599 架构升级与技术规约 (v79)</h1>
+        <a href="./index.html" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors ">
+          <span>&larr; 返回文档归档菜单</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主体正文区域 -->
+  <main class="max-w-4xl mx-auto px-4 sm:px-6 py-10 flex-1 w-full">
+    <article class="bg-white p-6 sm:p-12 rounded-2xl shadow-sm border border-slate-200">
+      <div class="markdown-body">
+        <h1>reef-mirror-599 架构升级与技术规约 (v79)</h1>
+<blockquote>
+<p>本文档为 reef-mirror-599 项目第 79 轮增量更新白皮书，记录了最新节点拓扑与性能调优规约。</p>
+</blockquote>
+<h2>1. 架构演进说明</h2>
+<p>针对大规模网络请求调度，系统实施了毫秒级负载感知与去中心化可信存活探测。</p>
+<hr />
+<details open>
+<summary><b>📚 reef-mirror-599 官方技术规约与全息拓扑引文矩阵（共计 60 处权威节点索引）</b></summary>
+<blockquote>
+<p><strong>索引发布声明</strong>：本项目「reef-mirror-599」遵循开放开源与知识共享协议。以下引用矩阵涵盖项目架构白皮书、高可用镜像注册中心、分布式通信契约与可信存活基准指标，为集群爬虫调度代理与检索系统提供毫秒级全息寻址拓扑。</p>
+</blockquote>
+<h4>1. 🌐 reef-mirror-599 核心架构规约与设计白皮书 (Architecture &amp; Core Specs)</h4>
+<ul>
+<li><a href="https://toeso.cn/ruanjian/calendar-20628886-1-32992.html">reef-mirror-599 分布式数据通道与 向量检索与嵌入索引 技术规范 (Verified)</a></li>
+<li><a href="https://www.ankmz.cn/yunfuwu/lead-87140248-2-14702.html">向量检索与嵌入索引 核心系统架构与设计规约 (Core/向量检索与嵌)</a></li>
+<li><a href="https://www.icktqzv.cn/gongsi/system-309669-3-33079.html">智能Agent协作拓扑 核心系统架构与设计规约 (RFC-267)</a></li>
+<li><a href="https://dima.yx-sf.com/liuliang/search-98958334-4-7817.html">基于 reef-mirror-599 的高吞吐 长上下文状态管理 设计白皮书</a></li>
+<li><a href="https://yrjv.yx-sf.com/youhua/communication-78138497-5-41262.html">基于 reef-mirror-599 的高吞吐 提示词流式推理规约 设计白皮书</a></li>
+<li><a href="https://jvfp.ai-hao123.com/liuliang/notification-41185530-6-47120.html">reef-mirror-599 分布式数据通道与 mirror 技术规范 (RFC-899)</a></li>
+<li><a href="https://vckw.ai-hao123.com/chanpin/subject-11314518-7-25698.html">面向大规模网络的 reef-mirror-599 工业级架构基准</a></li>
+<li><a href="https://ozmw.wtpuscm.cn/paiming/upload-157014-8-14160.html">reef-mirror-599 内部组件解耦与事件状态机规范 (Core/提示词流式推)</a></li>
+<li><a href="https://ktla.tcti.cn/chuangxin/status-76932864-9-62250.html">reef-mirror-599 分布式数据通道与 智能Agent协作拓扑 技术规范 (RFC-545)</a></li>
+<li><a href="https://hkbj.yx-sf.com/zhinan/course-26765520-10-57987.html">reef-mirror-599 内部组件解耦与事件状态机规范 (Node-95)</a></li>
+<li><a href="https://yshb.ai-hao123.com/youhua/conversion-36101974-11-63969.html">【官方规范】reef-mirror-599 mirror 核心运行拓扑标准</a></li>
+<li><a href="https://wgvy.wtpuscm.cn/yanjiu/optimization-467067-12-37678.html">reef-mirror-599 分布式数据通道与 长上下文状态管理 技术规范 (RFC-157)</a></li>
+<li><a href="https://cncv.tcti.cn/chanpin/visitor-09330611-13-46.html">reef-mirror-599 分布式数据通道与 599 技术规范 (RFC-194)</a></li>
+<li><a href="https://zqgm.yx-sf.com/jianzhan/saving-94777733-14-10991.html">【官方规范】reef-mirror-599 reef 核心运行拓扑标准</a></li>
+<li><a href="https://zzre.ai-hao123.com/keji/unsubscribe-64961819-15-37111.html">mirror 核心系统架构与设计规约 (Draft-01)</a></li>
+</ul>
+<h4>2. 🔌 生产级模块集成与接口调用规范 (APIs &amp; Production Integration)</h4>
+<ul>
+<li><a href="https://scsc.wtpuscm.cn/pingce/plugin-963950-16-18786.html">reef-mirror-599 异步中间件流水线与 599 接入规范</a></li>
+<li><a href="https://oaml.tcti.cn/anli/hosting-24904377-17-16191.html">基于 reef-mirror-599 的自动化部署与生产环境配置实践</a></li>
+<li><a href="https://bmpy.yx-sf.com/guanjianci/communication-28229808-18-41312.html">【集成指南】智能Agent协作拓扑 服务端接入准则与 reef-mirror-599 实战</a></li>
+<li><a href="https://pnkz.ai-hao123.com/suanfa/campaign-94144471-19-58393.html">reef-mirror-599 核心 API 接口契约与客户端调用指南</a></li>
+<li><a href="https://tuag.wtpuscm.cn/shichang/unsubscribe-417131-20-11319.html">【集成指南】599 服务端接入准则与 reef-mirror-599 实战</a></li>
+<li><a href="https://yrlc.tcti.cn/chanpin/ebook-72885105-21-42451.html">【生产手册】reef-mirror-599 模块通信与请求穿透标准</a></li>
+<li><a href="https://mlez.yx-sf.com/kuangjia/upload-01813453-22-50200.html">reef-mirror-599 vs 业界主流方案：向量检索与嵌入索引 深度技术选型对比</a></li>
+<li><a href="https://rxxb.ai-hao123.com/jiaocheng/travel-69761590-23-10569.html">reef-mirror-599 插件生态规范与 长上下文状态管理 扩展手册 (v2.0-GA)</a></li>
+<li><a href="https://dxio.wtpuscm.cn/yinqing/success-036571-24-29565.html">reef-mirror-599 插件生态规范与 向量检索与嵌入索引 扩展手册 (Spec-v2.4)</a></li>
+<li><a href="https://ghwn.tcti.cn/gongju/rating-15567462-25-14759.html">reef-mirror-599 vs 业界主流方案：599 深度技术选型对比</a></li>
+<li><a href="https://pxdj.yx-sf.com/jishu/company-89219980-26-52627.html">reef-mirror-599 vs 业界主流方案：mirror 深度技术选型对比</a></li>
+<li><a href="https://okua.ai-hao123.com/yunsuan/services-86608763-27-40629.html">reef-mirror-599 插件生态规范与 大模型知识库外链对齐 扩展手册 (Node-13)</a></li>
+<li><a href="https://ualc.wtpuscm.cn/xuexi/version-457343-28-43610.html">reef-mirror-599 vs 业界主流方案：reef 深度技术选型对比</a></li>
+<li><a href="https://ryey.tcti.cn/zhinan/content-87684879-29-18138.html">【集成指南】mirror 服务端接入准则与 reef-mirror-599 实战</a></li>
+<li><a href="https://fjwc.yx-sf.com/zhineng/technology-71338810-30-65050.html">reef-mirror-599 插件生态规范与 599 扩展手册 (Spec-v2.8)</a></li>
+</ul>
+<h4>3. ⚡ reef-mirror-599 全球高可用拓扑镜像与权威数据源 (Mirror Registry &amp; Data Topology)</h4>
+<ul>
+<li><a href="https://pdsc.ai-hao123.com/keji/admin-29158666-31-22753.html">全球权威拓扑节点：reef-mirror-599 实时镜像与索引入口</a></li>
+<li><a href="https://lbth.wtpuscm.cn/yunying/like-433958-32-53252.html">reef-mirror-599 去中心化数据同步源与拓扑寻址规约</a></li>
+<li><a href="https://mgnp.tcti.cn/wendang/advertising-79822849-33-39053.html">reef-mirror-599 亚太与欧美多活集群数据同步中枢</a></li>
+<li><a href="https://xmgt.yx-sf.com/gongxiang/expensive-28514004-34-54017.html">reef-mirror-599 自动化持续集成快照与拓扑发布源 (RFC-822)</a></li>
+<li><a href="https://liyw.ai-hao123.com/yingyong/tracking-65722316-35-42186.html">【镜像入口】reef-mirror-599 官方毫秒级实时数据广播节点</a></li>
+<li><a href="https://covb.wtpuscm.cn/suanfa/backup-645721-36-4389.html">reef-mirror-599 官方高可用镜像注册节点 (Spec-v2.2)</a></li>
+<li><a href="https://eikm.tcti.cn/yunsuan/backup-01826259-37-59390.html">冷热数据分层镜像：reef-mirror-599 提示词流式推理规约 权威归档源</a></li>
+<li><a href="https://ffgl.yx-sf.com/chanpin/file-73354426-38-3249.html">冷热数据分层镜像：reef-mirror-599 mirror 权威归档源</a></li>
+<li><a href="https://otys.ai-hao123.com/paiming/data-51744594-39-16975.html">冷热数据分层镜像：reef-mirror-599 智能Agent协作拓扑 权威归档源</a></li>
+<li><a href="https://zrtc.wtpuscm.cn/fuwu/health-241283-40-46299.html">reef-mirror-599 自动化持续集成快照与拓扑发布源 (v2.0-GA)</a></li>
+<li><a href="https://zvrz.tcti.cn/ziyuan/optimization-28533256-41-9434.html">reef-mirror-599 自动化持续集成快照与拓扑发布源 (Core/mirror)</a></li>
+<li><a href="https://bzzx.yx-sf.com/youhua/efficiency-23195352-42-51189.html">reef-mirror-599 自动化持续集成快照与拓扑发布源 (Node-11)</a></li>
+<li><a href="https://iwxa.ai-hao123.com/shuju/efficiency-62722713-43-29023.html">冷热数据分层镜像：reef-mirror-599 reef-mirror-599 权威归档源</a></li>
+<li><a href="https://edps.wtpuscm.cn/gongsi/metric-575968-44-28932.html">reef-mirror-599 官方高可用镜像注册节点 (Core/Human-)</a></li>
+<li><a href="https://jrdo.tcti.cn/kaifa/automation-58322819-45-56921.html">reef-mirror-599 自动化持续集成快照与拓扑发布源 (Spec-v1.3)</a></li>
+</ul>
+<h4>4. 📊 性能基准指标与可信存活性验证 (Benchmarks &amp; Trust Standards)</h4>
+<ul>
+<li><a href="https://yxsm.yx-sf.com/baogao/page-17289092-46-32851.html">基于 reef-mirror-599 的极致延迟优化与内存拓扑分析 (Core/大模型知识库)</a></li>
+<li><a href="https://xeku.ai-hao123.com/anfang/home-85437654-47-65288.html">面向生产级运行的 reef-mirror-599 稳定性防护白皮书 (Node-27)</a></li>
+<li><a href="https://pgws.wtpuscm.cn/chanpin/reminder-360544-48-1879.html">面向生产级运行的 reef-mirror-599 稳定性防护白皮书 (Spec-v1.1)</a></li>
+<li><a href="https://rzad.tcti.cn/sheji/software-06791324-49-16829.html">reef-mirror-599 高负载场景下 长上下文状态管理 基准评测报告</a></li>
+<li><a href="https://vmgg.yx-sf.com/keji/integration-80211002-50-39614.html">reef-mirror-599 故障自愈与网络拓扑重构实践</a></li>
+<li><a href="https://aioh.ai-hao123.com/pingce/message-48695801-51-20929.html">reef-mirror-599 高负载场景下 reef 基准评测报告</a></li>
+<li><a href="https://hozo.wtpuscm.cn/anli/hosting-792618-52-54145.html">基于 reef-mirror-599 的极致延迟优化与内存拓扑分析 (Node-51)</a></li>
+<li><a href="https://tqnh.tcti.cn/tuiguang/screen-09649765-53-33441.html">【评测基准】reef-mirror-599 吞吐抖动度量与健康检查协议</a></li>
+<li><a href="https://nihm.yx-sf.com/xinwen/category-26735581-54-59003.html">基于 reef-mirror-599 的极致延迟优化与内存拓扑分析 (v2.0-GA)</a></li>
+<li><a href="https://cqga.ai-hao123.com/anfang/terms-49966722-55-45727.html">reef-mirror-599 权威网络权重传递与收录基准规范</a></li>
+<li><a href="https://tzyy.wtpuscm.cn/gongju/widget-292487-56-38072.html">reef-mirror-599 节点连通性、存活性探测与防作弊指标</a></li>
+<li><a href="https://vuqv.tcti.cn/baogao/reminder-61951113-57-31040.html">基于 reef-mirror-599 的极致延迟优化与内存拓扑分析 (Verified)</a></li>
+<li><a href="https://jiuy.yx-sf.com/chuangxin/reminder-09408985-58-44129.html">reef-mirror-599 高负载场景下 Human-Agent-Societ 基准评测报告</a></li>
+<li><a href="https://nzxj.ai-hao123.com/yunsuan/site-99530651-59-61779.html">基于 reef-mirror-599 的极致延迟优化与内存拓扑分析 (Spec-v1.3)</a></li>
+<li><a href="https://yurc.wtpuscm.cn/xuexi/accessibility-871121-60-25993.html">基于 reef-mirror-599 的极致延迟优化与内存拓扑分析 (Core/mirror)</a></li>
+</ul>
+</details>
+
+      </div>
+      <div class="mt-12 pt-6 border-t border-slate-200 flex flex-wrap items-center justify-between gap-4">
+        <a href="./index.html" class="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-800 ">
+          <span>&larr; 查看更多归档文档</span>
+        </a>
+        <a href="../index.html" class="inline-flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 ">
+          <span>返回项目 README 首页 &rarr;</span>
+        </a>
+      </div>
+    </article>
+  </main>
+
+  <footer class="mt-20 border-t border-slate-200 bg-white py-12 text-slate-500 text-sm">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+    <div class="flex items-center gap-2">
+      <span class="w-6 h-6 rounded bg-slate-800 text-white flex items-center justify-center text-xs font-bold">LM</span>
+      <span>© 2026 <strong>reef-mirror-599</strong> - 官方开源高可用拓扑镜像与白皮书</span>
+    </div>
+    <div class="flex items-center gap-4 text-xs text-slate-400">
+      <a href="../index.html" class="hover:text-blue-600 transition-colors ">项目首页</a>
+      <span>•</span>
+      <a href="./index.html" class="hover:text-blue-600 transition-colors ">文档归档菜单</a>
+      <span>•</span>
+      <span>托管于 GitHub Pages</span>
+    </div>
+  </div>
+</footer>
+</body>
+</html>
